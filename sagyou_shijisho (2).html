@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作業指示書 | 整備管理システム</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Share+Tech+Mono&display=swap');
+  :root {
+    --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a;
+    --accent:#e8a020; --accent2:#f0c040;
+    --text:#e8eaf0; --text2:#8892a4; --border:#2e3350;
+    --success:#2ecc71; --warning:#f39c12; --danger:#e74c3c; --info:#3498db;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  .header{background:var(--surface);border-bottom:2px solid var(--accent);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100;}
+  .header-logo{display:flex;align-items:center;gap:12px;font-size:18px;font-weight:900;letter-spacing:.05em;color:var(--accent);}
+  .header-logo svg{width:28px;height:28px;}
+
+  .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;}
+  .tab{padding:14px 18px;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;white-space:nowrap;}
+  .tab:hover{color:var(--text);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+  .main{padding:20px;max-width:960px;margin:0 auto;}
+  .page{display:none;} .page.active{display:block;}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:14px;}
+  .card-title{font-size:12px;font-weight:900;letter-spacing:.1em;color:var(--accent);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .card-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-grid.cols3{grid-template-columns:1fr 1fr 1fr;}
+  @media(max-width:600px){.form-grid,.form-grid.cols3{grid-template-columns:1fr;}}
+  .form-group{display:flex;flex-direction:column;gap:5px;}
+  label{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--text2);text-transform:uppercase;}
+  label .req{color:var(--accent);margin-left:4px;}
+  input[type=text],input[type=tel],input[type=date],select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .2s;width:100%;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);}
+  textarea{resize:vertical;min-height:80px;}
+  select option{background:var(--surface2);}
+
+  .status-select{display:flex;gap:8px;flex-wrap:wrap;}
+  .status-btn{padding:7px 14px;border-radius:20px;border:2px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .2s;}
+  .status-btn.active-waiting{border-color:var(--text2);color:var(--text2);background:rgba(136,146,164,.15);}
+  .status-btn.active-inprogress{border-color:var(--info);color:var(--info);background:rgba(52,152,219,.15);}
+  .status-btn.active-parts{border-color:var(--warning);color:var(--warning);background:rgba(243,156,18,.15);}
+  .status-btn.active-done{border-color:var(--success);color:var(--success);background:rgba(46,204,113,.15);}
+  .status-btn.active-delivered{border-color:var(--accent);color:var(--accent);background:rgba(232,160,32,.15);}
+
+  /* ===== CHECKLIST ===== */
+  .checklist{display:flex;flex-direction:column;gap:5px;}
+  .check-row{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;transition:background .15s,border-color .15s;}
+  .check-row.checked{background:rgba(46,204,113,.09);border-color:rgba(46,204,113,.4);}
+  .check-box{width:22px;height:22px;min-width:22px;border-radius:6px;border:2px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;font-size:13px;color:transparent;}
+  .check-row.checked .check-box{background:var(--success);border-color:var(--success);color:#000;}
+  .check-label{flex:1;font-size:14px;color:var(--text2);cursor:pointer;user-select:none;transition:color .15s;}
+  .check-row.checked .check-label{color:var(--text);}
+  .check-del{background:transparent;border:none;cursor:pointer;color:var(--border);font-size:14px;padding:2px 4px;border-radius:4px;transition:color .15s;line-height:1;}
+  .check-del:hover{color:var(--danger);}
+
+  .add-item-bar{display:flex;gap:8px;margin-top:8px;}
+  .add-item-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;}
+  .add-item-input:focus{outline:none;border-color:var(--accent);}
+
+  .btn{padding:9px 18px;border-radius:7px;border:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.04em;display:inline-flex;align-items:center;gap:7px;}
+  .btn-primary{background:var(--accent);color:#000;} .btn-primary:hover{background:var(--accent2);}
+  .btn-secondary{background:transparent;border:1px solid var(--border);color:var(--text2);} .btn-secondary:hover{border-color:var(--text);color:var(--text);}
+  .btn-danger{background:transparent;border:1px solid var(--danger);color:var(--danger);}
+  .btn-sm{padding:6px 12px;font-size:12px;} .btn-xs{padding:4px 9px;font-size:11px;}
+
+  .actions-bar{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap;}
+
+  .photo-area{border:2px dashed var(--border);border-radius:8px;padding:22px;text-align:center;cursor:pointer;transition:all .2s;display:block;}
+  .photo-area:hover{border-color:var(--accent);background:rgba(232,160,32,.05);}
+  .photo-area input{display:none;}
+  .photo-area-text{color:var(--text2);font-size:13px;margin-top:6px;}
+  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-top:12px;}
+  .photo-thumb{aspect-ratio:1;border-radius:8px;overflow:hidden;position:relative;border:1px solid var(--border);}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;}
+  .photo-remove{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);border:none;border-radius:50%;width:22px;height:22px;color:white;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;}
+
+  .signature-wrap{border:2px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;position:relative;transition:border-color .2s;}
+  .signature-wrap.active{border-color:var(--accent);}
+  .signature-wrap canvas{display:block;cursor:crosshair;touch-action:none;width:100%!important;}
+  .sig-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#ccc;font-size:15px;pointer-events:none;transition:opacity .3s;text-align:center;white-space:nowrap;}
+  .sig-hint.hidden{opacity:0;}
+  .sig-toolbar{display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;}
+  .pen-size-btn{width:34px;height:34px;border-radius:50%;border:2px solid var(--border);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;color:var(--text2);font-size:11px;font-weight:700;}
+  .pen-size-btn.selected{border-color:var(--accent);color:var(--accent);background:rgba(232,160,32,.15);}
+  .sig-label{font-size:11px;color:var(--text2);font-weight:700;}
+
+  .list-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap;}
+  .list-search input{width:220px;padding:9px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:inherit;font-size:13px;}
+  .list-search input:focus{outline:none;border-color:var(--accent);}
+  .order-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:10px;cursor:pointer;transition:all .2s;display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;}
+  .order-card:hover{border-color:var(--accent);background:var(--surface2);}
+  .order-num{font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--accent);white-space:nowrap;}
+  .order-info .car{font-size:15px;font-weight:700;}
+  .order-info .customer{font-size:12px;color:var(--text2);margin-top:2px;}
+  .order-date{font-size:12px;color:var(--text2);text-align:right;white-space:nowrap;}
+  .badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;}
+  .badge-waiting{background:rgba(136,146,164,.2);color:var(--text2);}
+  .badge-inprogress{background:rgba(52,152,219,.2);color:var(--info);}
+  .badge-parts{background:rgba(243,156,18,.2);color:var(--warning);}
+  .badge-done{background:rgba(46,204,113,.2);color:var(--success);}
+  .badge-delivered{background:rgba(232,160,32,.2);color:var(--accent);}
+  .empty-state{text-align:center;padding:60px 20px;color:var(--text2);}
+  .empty-state .icon{font-size:48px;margin-bottom:12px;}
+
+  /* 項目管理ページ */
+  .master-section{margin-bottom:20px;}
+  .master-sec-title{font-size:12px;font-weight:900;color:var(--accent);margin-bottom:8px;letter-spacing:.08em;}
+  .master-item-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);font-size:13px;}
+  .master-item-row span{flex:1;}
+
+  .order-number-display{font-family:'Share Tech Mono',monospace;font-size:20px;color:var(--accent);letter-spacing:.1em;}
+
+  @media print{
+    body{background:white;color:black;}
+    .header,.tabs,.actions-bar,.sig-toolbar,.photo-area,.check-del,.add-item-bar{display:none!important;}
+    .card{background:white;border:1px solid #ccc;break-inside:avoid;}
+    .check-row{background:white!important;border:1px solid #bbb!important;}
+    .check-box{border:2px solid #666!important;color:black!important;}
+    .check-label{color:black!important;}
+    .main{max-width:100%;padding:8px;}
+    .print-header{display:flex!important;justify-content:space-between;align-items:center;border-bottom:2px solid #333;padding-bottom:12px;margin-bottom:16px;}
+  }
+  .print-header{display:none;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>
+      <path d="M4 18H2V12L5 6h11l3 6v6h-2M4 18h12"/><path d="M8 6v3M14 9V6"/>
+    </svg>
+    整備管理システム
+  </div>
+  <span id="currentOrderNum" class="order-number-display"></span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showPage('new')">📋 新規作成</div>
+  <div class="tab" onclick="showPage('syaken')">🚗 車検</div>
+  <div class="tab" onclick="showPage('list')">📁 一覧</div>
+  <div class="tab" onclick="showPage('master')">⚙️ 項目管理</div>
+</div>
+
+<div class="main">
+
+<!-- 新規作成 -->
+<div class="page active" id="page-new">
+  <div class="print-header">
+    <div><strong style="font-size:20px">作業指示書</strong></div>
+    <div id="printOrderNum" style="font-size:16px;font-family:monospace"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">作業進捗ステータス</div>
+    <div class="status-select">
+      <button class="status-btn" onclick="setStatus('waiting','作業待ち')">⏳ 作業待ち</button>
+      <button class="status-btn" onclick="setStatus('inprogress','作業中')">🔧 作業中</button>
+      <button class="status-btn" onclick="setStatus('parts','部品待ち')">📦 部品待ち</button>
+      <button class="status-btn" onclick="setStatus('done','作業完了')">✅ 作業完了</button>
+      <button class="status-btn" onclick="setStatus('delivered','納車済み')">🚗 納車済み</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">顧客情報</div>
+    <div class="form-grid">
+      <div class="form-group"><label>氏名 <span class="req">*</span></label><input type="text" id="custName" placeholder="山田 太郎"></div>
+      <div class="form-group"><label>連絡先</label><input type="tel" id="custPhone" placeholder="090-0000-0000"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">車両情報</div>
+    <div class="form-grid cols3">
+      <div class="form-group"><label>車名 <span class="req">*</span></label><input type="text" id="carName" placeholder="トヨタ プリウス"></div>
+      <div class="form-group"><label>年式</label><input type="text" id="carYear" placeholder="2020年"></div>
+      <div class="form-group"><label>ナンバー</label><input type="text" id="carPlate" placeholder="品川 500 あ 1234"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">入出庫 / 担当</div>
+    <div class="form-grid">
+      <div class="form-group"><label>入庫日</label><input type="date" id="dateIn"></div>
+      <div class="form-group"><label>出庫予定日</label><input type="date" id="dateOut"></div>
+      <div class="form-group"><label>担当整備士</label><select id="mechName"><option value="">選択してください</option></select></div>
+      <div class="form-group"><label>受付担当</label><select id="receptionName"><option value="">選択してください</option></select></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔑 お客様の依頼修理事項</div>
+    <div class="checklist" id="cl-request"></div>
+    <div class="add-item-bar">
+      <input class="add-item-input" id="new-request" placeholder="項目を追加... (Enterで確定)">
+      <button class="btn btn-secondary btn-sm" onclick="addCustomItem('request')">＋ 追加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔍 入庫して気がついた事</div>
+    <div class="checklist" id="cl-notice"></div>
+    <div class="add-item-bar">
+      <input class="add-item-input" id="new-notice" placeholder="項目を追加... (Enterで確定)">
+      <button class="btn btn-secondary btn-sm" onclick="addCustomItem('notice')">＋ 追加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🛡 予防整備欄</div>
+    <div class="checklist" id="cl-prevent"></div>
+    <div class="add-item-bar">
+      <input class="add-item-input" id="new-prevent" placeholder="項目を追加... (Enterで確定)">
+      <button class="btn btn-secondary btn-sm" onclick="addCustomItem('prevent')">＋ 追加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔧 作業内容</div>
+    <div class="checklist" id="cl-work"></div>
+    <div class="add-item-bar">
+      <input class="add-item-input" id="new-work" placeholder="項目を追加... (Enterで確定)">
+      <button class="btn btn-secondary btn-sm" onclick="addCustomItem('work')">＋ 追加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📝 備考・特記事項</div>
+    <textarea id="remarks" placeholder="申し送り、注意事項など..."></textarea>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📷 作業写真</div>
+    <label class="photo-area">
+      <input type="file" accept="image/*" multiple onchange="addPhotos('photos',event)">
+      <div style="font-size:32px">📷</div>
+      <div class="photo-area-text">タップして写真を追加（複数可）</div>
+    </label>
+    <div class="photo-grid" id="photoGrid"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🧾 納品書</div>
+    <label class="photo-area">
+      <input type="file" accept="image/*" multiple onchange="addPhotos('deliveryPhotos',event)">
+      <div style="font-size:32px">🧾</div>
+      <div class="photo-area-text">納品書の写真を貼り付け（複数可）</div>
+    </label>
+    <div class="photo-grid" id="deliveryGrid"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✍️ 顧客署名</div>
+    <div class="signature-wrap" id="sigWrap">
+      <canvas id="sigCanvas" width="1400" height="320"></canvas>
+      <div class="sig-hint" id="sigHint">✍️ ここにサインしてください<br><span style="font-size:12px">Apple Pencil・指・マウスで書けます</span></div>
+    </div>
+    <div class="sig-toolbar">
+      <span class="sig-label">太さ：</span>
+      <button class="pen-size-btn selected" id="psBtn1" onclick="setPenSize(1.5,'psBtn1')">細</button>
+      <button class="pen-size-btn" id="psBtn2" onclick="setPenSize(3,'psBtn2')">中</button>
+      <button class="pen-size-btn" id="psBtn3" onclick="setPenSize(5,'psBtn3')">太</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-danger btn-sm" onclick="clearSig()">🗑 クリア</button>
+    </div>
+  </div>
+
+  <div class="actions-bar">
+    <button class="btn btn-secondary" onclick="clearForm()">🗑 クリア</button>
+    <button class="btn btn-secondary" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-primary" onclick="saveOrder()">💾 保存</button>
+  </div>
+</div>
+
+<!-- 車検 -->
+<div class="page" id="page-syaken">
+
+  <div class="print-header">
+    <div><strong style="font-size:20px">車検作業指示・検査表</strong></div>
+    <div id="syakenOrderNum" style="font-size:14px;font-family:monospace"></div>
+  </div>
+
+  <!-- 基本情報 -->
+  <div class="card">
+    <div class="card-title">🚗 車両・顧客情報</div>
+    <div class="form-grid">
+      <div class="form-group"><label>ユーザー名 <span class="req">*</span></label><input type="text" id="sk-userName" placeholder="山田 太郎"></div>
+      <div class="form-group"><label>車輌名 <span class="req">*</span></label><input type="text" id="sk-carName" placeholder="トヨタ プリウス"></div>
+      <div class="form-group"><label>登録ナンバー</label><input type="text" id="sk-plateNum" placeholder="品川 500 あ 1234"></div>
+      <div class="form-group"><label>車台番号</label><input type="text" id="sk-chassisNum" placeholder="ZVW30-1234567"></div>
+      <div class="form-group"><label>走行キロ</label><input type="text" id="sk-mileage" placeholder="45,000 km"></div>
+      <div class="form-group"><label>エンジン型式</label><input type="text" id="sk-engineType" placeholder="2ZR-FXE"></div>
+    </div>
+  </div>
+
+  <!-- 担当・日程 -->
+  <div class="card">
+    <div class="card-title">👨‍🔧 担当・日程</div>
+    <div class="form-grid cols3">
+      <div class="form-group"><label>見積り</label>
+        <select id="sk-estimate"><option value="">選択</option><option>未</option><option>済</option></select>
+      </div>
+      <div class="form-group"><label>受け入れ責任者</label><select id="sk-manager"><option value="">選択してください</option></select></div>
+      <div class="form-group"><label>検査作業者</label><select id="sk-inspector"><option value="">選択してください</option></select></div>
+      <div class="form-group"><label>来店日</label><input type="date" id="sk-visitDate"></div>
+      <div class="form-group"><label>完成予定日</label><input type="date" id="sk-completeDate"></div>
+      <div class="form-group"><label>納車日</label><input type="date" id="sk-deliveryDate"></div>
+    </div>
+  </div>
+
+  <!-- オプション作業（要/不要） -->
+  <div class="card">
+    <div class="card-title">✨ オプション作業</div>
+    <div id="sk-options-grid" style="display:flex;flex-direction:column;gap:8px;">
+    </div>
+  </div>
+
+  <!-- 作業指示（不要／支給／要の3択） -->
+  <div class="card">
+    <div class="card-title">🔧 作業指示</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="sk-works-grid">
+    </div>
+  </div>
+
+  <!-- KIT種類 -->
+  <div class="card">
+    <div class="card-title">📦 KIT種類</div>
+    <div class="form-grid">
+      <div class="form-group"><label>整備KIT</label><input type="text" id="sk-kitMaintenance" placeholder="品番・内容など"></div>
+      <div class="form-group"><label>シールKIT</label><input type="text" id="sk-kitSeal" placeholder="品番・内容など"></div>
+    </div>
+  </div>
+
+  <!-- その他点検 -->
+  <div class="card">
+    <div class="card-title">🔍 その他点検</div>
+    <div style="display:flex;flex-direction:column;gap:8px;" id="sk-others-grid"></div>
+  </div>
+
+  <!-- ユーザー申告事項 -->
+  <div class="card">
+    <div class="card-title">💬 ユーザー申告事項</div>
+    <textarea id="sk-userRemarks" placeholder="お客様からの申告内容を入力..."></textarea>
+  </div>
+
+  <!-- 受入検査事項 -->
+  <div class="card">
+    <div class="card-title">📋 受入検査事項</div>
+    <textarea id="sk-inspectionRemarks" placeholder="受入時の検査内容を入力..."></textarea>
+  </div>
+
+  <!-- 写真 -->
+  <div class="card">
+    <div class="card-title">📷 車検写真</div>
+    <label class="photo-area">
+      <input type="file" accept="image/*" multiple onchange="addPhotos('syakenPhotos',event)">
+      <div style="font-size:32px">📷</div>
+      <div class="photo-area-text">タップして写真を追加（複数可）</div>
+    </label>
+    <div class="photo-grid" id="syakenPhotoGrid"></div>
+  </div>
+
+  <!-- 署名 -->
+  <div class="card">
+    <div class="card-title">✍️ 顧客署名</div>
+    <div class="signature-wrap" id="sk-sigWrap">
+      <canvas id="sk-sigCanvas" width="1400" height="320"></canvas>
+      <div class="sig-hint" id="sk-sigHint">✍️ ここにサインしてください</div>
+    </div>
+    <div class="sig-toolbar">
+      <span class="sig-label">太さ：</span>
+      <button class="pen-size-btn selected" id="sk-psBtn1" onclick="skSetPenSize(1.5,'sk-psBtn1')">細</button>
+      <button class="pen-size-btn" id="sk-psBtn2" onclick="skSetPenSize(3,'sk-psBtn2')">中</button>
+      <button class="pen-size-btn" id="sk-psBtn3" onclick="skSetPenSize(5,'sk-psBtn3')">太</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-danger btn-sm" onclick="skClearSig()">🗑 クリア</button>
+    </div>
+  </div>
+
+  <div class="actions-bar">
+    <button class="btn btn-secondary" onclick="skClearForm()">🗑 クリア</button>
+    <button class="btn btn-secondary" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-primary" onclick="skSave()">💾 保存</button>
+  </div>
+</div>
+
+<!-- 一覧 -->
+<div class="page" id="page-list">
+  <div class="list-header">
+    <strong style="font-size:16px;font-weight:900">作業指示書 一覧</strong>
+    <div class="list-search"><input type="text" id="searchInput" placeholder="🔍 顧客名・車名で検索" oninput="renderList()"></div>
+  </div>
+  <div id="orderList"></div>
+</div>
+
+<!-- 項目管理 -->
+<div class="page" id="page-master">
+
+  <!-- スタッフ管理 -->
+  <div class="card">
+    <div class="card-title">👨‍🔧 スタッフ管理</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px">登録したスタッフ名が担当整備士・受付担当のドロップダウンに表示されます。</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div class="master-section">
+        <div class="master-sec-title">🔧 整備士</div>
+        <div id="master-mechs"></div>
+        <div class="add-item-bar" style="margin-top:8px">
+          <input class="add-item-input" id="master-new-mech" placeholder="整備士名を追加...">
+          <button class="btn btn-secondary btn-xs" onclick="staffAdd('mechs','master-new-mech')">＋</button>
+        </div>
+      </div>
+      <div class="master-section">
+        <div class="master-sec-title">📋 受付担当</div>
+        <div id="master-receptions"></div>
+        <div class="add-item-bar" style="margin-top:8px">
+          <input class="add-item-input" id="master-new-reception" placeholder="受付担当名を追加...">
+          <button class="btn btn-secondary btn-xs" onclick="staffAdd('receptions','master-new-reception')">＋</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="saveStaff()">💾 スタッフを保存</button>
+    </div>
+  </div>
+  <!-- 通常作業指示書 -->
+  <div class="card">
+    <div class="card-title">⚙️ 作業指示書 項目管理</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:20px">各セクションのデフォルト項目を自由に追加・削除できます。保存後、次回の新規作成から反映されます。</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div class="master-section">
+        <div class="master-sec-title">🔑 依頼修理事項</div>
+        <div id="master-request"></div>
+        <div class="add-item-bar" style="margin-top:8px">
+          <input class="add-item-input" id="master-new-request" placeholder="新しい項目...">
+          <button class="btn btn-secondary btn-xs" onclick="masterAdd('request')">＋</button>
+        </div>
+      </div>
+      <div class="master-section">
+        <div class="master-sec-title">🔍 気がついた事</div>
+        <div id="master-notice"></div>
+        <div class="add-item-bar" style="margin-top:8px">
+          <input class="add-item-input" id="master-new-notice" placeholder="新しい項目...">
+          <button class="btn btn-secondary btn-xs" onclick="masterAdd('notice')">＋</button>
+        </div>
+      </div>
+      <div class="master-section">
+        <div class="master-sec-title">🛡 予防整備</div>
+        <div id="master-prevent"></div>
+        <div class="add-item-bar" style="margin-top:8px">
+          <input class="add-item-input" id="master-new-prevent" placeholder="新しい項目...">
+          <button class="btn btn-secondary btn-xs" onclick="masterAdd('prevent')">＋</button>
+        </div>
+      </div>
+      <div class="master-section">
+        <div class="master-sec-title">🔧 作業内容</div>
+        <div id="master-work"></div>
+        <div class="add-item-bar" style="margin-top:8px">
+          <input class="add-item-input" id="master-new-work" placeholder="新しい項目...">
+          <button class="btn btn-secondary btn-xs" onclick="masterAdd('work')">＋</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:20px;display:flex;justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="saveMaster()">💾 保存</button>
+    </div>
+  </div>
+
+  <!-- 車検項目管理 -->
+  <div class="card">
+    <div class="card-title">🚗 車検 項目管理</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:20px">車検フォームの各項目を追加・削除できます。保存後、次回の車検フォームから反映されます。</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <!-- 作業指示（全幅） -->
+      <div class="master-section" style="grid-column:span 2;">
+        <div class="master-sec-title">🔧 作業指示（不要 / 支給 / 要）</div>
+        <div id="master-sk-works" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+        <div class="add-item-bar" style="margin-top:10px">
+          <input class="add-item-input" id="master-new-sk-work" placeholder="例：LLCフラッシング、ATF交換...">
+          <button class="btn btn-secondary btn-xs" onclick="skMasterAdd('works','master-new-sk-work')">＋ 追加</button>
+        </div>
+      </div>
+      <!-- オプション作業 -->
+      <div class="master-section">
+        <div class="master-sec-title">✨ オプション作業（要 / 不要）</div>
+        <div id="master-sk-options"></div>
+        <div class="add-item-bar" style="margin-top:10px">
+          <input class="add-item-input" id="master-new-sk-option" placeholder="例：ルームクリーニング...">
+          <button class="btn btn-secondary btn-xs" onclick="skMasterAdd('options','master-new-sk-option')">＋ 追加</button>
+        </div>
+      </div>
+      <!-- その他点検 -->
+      <div class="master-section">
+        <div class="master-sec-title">🔍 その他点検（点検 / 交換）</div>
+        <div id="master-sk-others"></div>
+        <div class="add-item-bar" style="margin-top:10px">
+          <input class="add-item-input" id="master-new-sk-other" placeholder="例：消火器点検...">
+          <button class="btn btn-secondary btn-xs" onclick="skMasterAdd('others','master-new-sk-other')">＋ 追加</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:20px;display:flex;justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="saveSkMaster()">💾 車検項目を保存</button>
+    </div>
+  </div>
+
+  <!-- GAS URL設定 -->
+  <div class="card">
+    <div class="card-title">🔗 Googleスプレッドシート連携</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Apps ScriptのデプロイURLを設定するとデータがGoogleスプレッドシートに自動保存されます。</p>
+    <div class="form-group">
+      <label>Apps Script URL</label>
+      <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/..." style="font-size:12px;" value="https://script.google.com/macros/s/AKfycbx4QoFqx87toGV6ichJqcthm1FjpbgnuBjlg88ClYbVtBuHkoXJJGJAZK3Z3TB97ls/exec">
+    </div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-primary" onclick="saveGasUrl()">💾 URLを保存</button>
+      <button class="btn btn-secondary" onclick="testGasUrl()">🔍 接続テスト</button>
+      <span id="gasStatus" style="font-size:12px;color:var(--text2);"></span>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ===== デフォルト項目 =====
+const DEFAULT_MASTER = {
+  request: ['エンジン不調','ブレーキ異音','エアコン不良','オイル漏れ','タイヤ異常','灯火類不良','異音・振動','ハンドル異常','窓・ドア不良','その他'],
+  notice:  ['エンジンオイル量少','タイヤ摩耗','バッテリー劣化','ブレーキパッド残少','エアフィルター汚れ','ワイパー劣化','冷却水量少','ベルト類劣化','灯火類切れ','下回りサビ'],
+  prevent: ['エンジンオイル交換','オイルフィルター交換','エアフィルター交換','ワイパーゴム交換','バッテリー点検','ブレーキフルード交換','クーラント交換','プラグ交換','クラッチ調整','タイヤローテーション','タイヤ4本交換','ブレーキパッド交換'],
+  work:    ['エンジンオイル交換','ブレーキパッド交換','タイヤ交換','バッテリー交換','エアコンガス補充','ベルト類交換','ブレーキ調整','灯火類交換','洗車・清掃','その他修理']
+};
+
+// ===== STATE =====
+let orders = JSON.parse(localStorage.getItem('sagyou_orders') || '[]');
+let masterItems = JSON.parse(localStorage.getItem('master_items') || 'null') || JSON.parse(JSON.stringify(DEFAULT_MASTER));
+let currentStatus = 'waiting';
+let photos = [], deliveryPhotos = [];
+let editingId = null;
+let checkState = {};
+const SECTIONS = ['request','notice','prevent','work'];
+
+// ===== STAFF MASTER =====
+const DEFAULT_STAFF = { mechs: [], receptions: [] };
+let staffMaster = JSON.parse(localStorage.getItem('staff_master') || 'null') || JSON.parse(JSON.stringify(DEFAULT_STAFF));
+
+function saveStaff(){
+  localStorage.setItem('staff_master', JSON.stringify(staffMaster));
+  updateStaffSelects();
+  alert('✅ スタッフを保存しました！');
+}
+
+function staffAdd(section, inputId){
+  const input = document.getElementById(inputId);
+  const val = input.value.trim();
+  if(!val) return;
+  if(staffMaster[section].includes(val)){ alert('同じ名前が既に登録されています'); return; }
+  staffMaster[section].push(val);
+  input.value = '';
+  renderStaffMaster();
+}
+
+function staffRemove(section, i){
+  if(!confirm('「'+staffMaster[section][i]+'」を削除しますか？')) return;
+  staffMaster[section].splice(i,1);
+  renderStaffMaster();
+  updateStaffSelects();
+}
+
+function renderStaffMaster(){
+  ['mechs','receptions'].forEach(sec => {
+    const container = document.getElementById('master-' + sec);
+    if(!container) return;
+    container.innerHTML = '';
+    staffMaster[sec].forEach((name, i) => {
+      const div = document.createElement('div');
+      div.className = 'master-item-row';
+      div.innerHTML = `<span>${esc(name)}</span><button class="check-del" onclick="staffRemove('${sec}',${i})">✕</button>`;
+      container.appendChild(div);
+    });
+  });
+}
+
+function updateStaffSelects(){
+  // 作業指示書
+  const mechSel = document.getElementById('mechName');
+  const recepSel = document.getElementById('receptionName');
+  // 車検
+  const skMgrSel = document.getElementById('sk-manager');
+  const skInspSel = document.getElementById('sk-inspector');
+
+  [mechSel, skMgrSel, skInspSel].forEach(sel => {
+    if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">選択してください</option>';
+    staffMaster.mechs.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      if(name === cur) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  });
+
+  [recepSel].forEach(sel => {
+    if(!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">選択してください</option>';
+    staffMaster.receptions.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      if(name === cur) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// Enterキーで追加
+document.addEventListener('DOMContentLoaded', () => {
+  [['master-new-mech','mechs'],['master-new-reception','receptions']].forEach(([id,sec]) => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();staffAdd(sec,id);} });
+  });
+  updateStaffSelects();
+});
+
+// ===== PAGE =====
+function showPage(p) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + p).classList.add('active');
+  document.querySelectorAll('.tab')[{new:0,syaken:1,list:2,master:3}[p]].classList.add('active');
+  if (p === 'list') renderList();
+  if (p === 'master') renderMaster();
+  if (p === 'syaken') skInitIfNeeded();
+}
+
+// ===== STATUS =====
+function setStatus(val, label) {
+  currentStatus = val;
+  document.querySelectorAll('.status-btn').forEach(b => {
+    b.className = 'status-btn';
+    if (b.textContent.includes(label)) b.classList.add('active-' + val);
+  });
+}
+setStatus('waiting', '作業待ち');
+
+// ===== CHECKLIST =====
+function initCheckState() {
+  checkState = {};
+  SECTIONS.forEach(sec => {
+    checkState[sec] = masterItems[sec].map(label => ({label, checked: false}));
+  });
+}
+
+function renderChecklist(sec) {
+  const container = document.getElementById('cl-' + sec);
+  if (!container) return;
+  container.innerHTML = '';
+  (checkState[sec] || []).forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'check-row' + (item.checked ? ' checked' : '');
+    row.innerHTML = `<div class="check-box">${item.checked ? '✓' : ''}</div><span class="check-label">${esc(item.label)}</span><button class="check-del" onclick="removeCheckItem('${sec}',${i})" title="削除">✕</button>`;
+    row.querySelector('.check-box').addEventListener('click', () => toggle(sec, i));
+    row.querySelector('.check-label').addEventListener('click', () => toggle(sec, i));
+    container.appendChild(row);
+  });
+}
+
+function toggle(sec, i) {
+  checkState[sec][i].checked = !checkState[sec][i].checked;
+  renderChecklist(sec);
+}
+
+function removeCheckItem(sec, i) {
+  checkState[sec].splice(i, 1);
+  renderChecklist(sec);
+}
+
+function addCustomItem(sec) {
+  const input = document.getElementById('new-' + sec);
+  const val = input.value.trim();
+  if (!val) return;
+  checkState[sec].push({label: val, checked: true});
+  renderChecklist(sec);
+  input.value = '';
+  input.focus();
+}
+
+SECTIONS.forEach(sec => {
+  document.getElementById('new-' + sec).addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addCustomItem(sec); }
+  });
+});
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+initCheckState();
+SECTIONS.forEach(sec => renderChecklist(sec));
+
+// ===== MASTER PAGE =====
+function renderMaster() {
+  SECTIONS.forEach(sec => {
+    const container = document.getElementById('master-' + sec);
+    if (!container) return;
+    container.innerHTML = '';
+    masterItems[sec].forEach((item, i) => {
+      const row = document.createElement('div');
+      row.className = 'master-item-row';
+      row.innerHTML = `<span>${esc(item)}</span><button class="check-del" onclick="masterRemove('${sec}',${i})">✕</button>`;
+      container.appendChild(row);
+    });
+  });
+}
+
+function masterAdd(sec) {
+  const input = document.getElementById('master-new-' + sec);
+  const val = input.value.trim();
+  if (!val) return;
+  masterItems[sec].push(val);
+  input.value = '';
+  renderMaster();
+}
+
+function masterRemove(sec, i) {
+  if (!confirm('「' + masterItems[sec][i] + '」を削除しますか？')) return;
+  masterItems[sec].splice(i, 1);
+  renderMaster();
+}
+
+function saveMaster() {
+  localStorage.setItem('master_items', JSON.stringify(masterItems));
+  alert('✅ 保存しました！\n次回の新規作成から反映されます。');
+}
+
+SECTIONS.forEach(sec => {
+  document.getElementById('master-new-' + sec).addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); masterAdd(sec); }
+  });
+});
+
+// ===== 車検マスター管理 =====
+function renderSkMaster(){
+  skMaster = loadSkMaster();
+  // 作業指示
+  const worksEl = document.getElementById('master-sk-works');
+  if(worksEl){
+    worksEl.innerHTML = '';
+    skMaster.works.forEach((item,i)=>{
+      const div=document.createElement('div');
+      div.className='master-item-row';
+      div.innerHTML=`<span>${esc(item)}</span><button class="check-del" onclick="skMasterRemove('works',${i})">✕</button>`;
+      worksEl.appendChild(div);
+    });
+  }
+  // オプション
+  const optEl = document.getElementById('master-sk-options');
+  if(optEl){
+    optEl.innerHTML = '';
+    skMaster.options.forEach((item,i)=>{
+      const div=document.createElement('div');
+      div.className='master-item-row';
+      div.innerHTML=`<span>${esc(item)}</span><button class="check-del" onclick="skMasterRemove('options',${i})">✕</button>`;
+      optEl.appendChild(div);
+    });
+  }
+  // その他点検
+  const othEl = document.getElementById('master-sk-others');
+  if(othEl){
+    othEl.innerHTML = '';
+    skMaster.others.forEach((item,i)=>{
+      const div=document.createElement('div');
+      div.className='master-item-row';
+      div.innerHTML=`<span>${esc(item)}</span><button class="check-del" onclick="skMasterRemove('others',${i})">✕</button>`;
+      othEl.appendChild(div);
+    });
+  }
+}
+
+function skMasterAdd(section, inputId){
+  const input = document.getElementById(inputId);
+  const val = input.value.trim();
+  if(!val) return;
+  skMaster[section].push(val);
+  input.value='';
+  renderSkMaster();
+}
+
+function skMasterRemove(section, i){
+  if(!confirm('「'+skMaster[section][i]+'」を削除しますか？')) return;
+  skMaster[section].splice(i,1);
+  renderSkMaster();
+}
+
+function saveSkMaster(){
+  localStorage.setItem('sk_master_items', JSON.stringify(skMaster));
+  // 車検フォームに即反映
+  skInitDone=false;
+  alert('✅ 車検項目を保存しました！\n次回の車検フォームから反映されます。');
+}
+
+// renderMasterを拡張して車検マスターも描画
+const _origRenderMaster = renderMaster;
+function renderMaster(){
+  _origRenderMaster();
+  renderSkMaster();
+  renderStaffMaster();
+  // GAS URLを表示
+  const urlInput = document.getElementById('gasUrl');
+  const GAS_DEFAULT = 'https://script.google.com/macros/s/AKfycbx4QoFqx87toGV6ichJqcthm1FjpbgnuBjlg88ClYbVtBuHkoXJJGJAZK3Z3TB97ls/exec';
+  if(!localStorage.getItem('gas_url')) localStorage.setItem('gas_url', GAS_DEFAULT);
+  if(urlInput) urlInput.value = localStorage.getItem('gas_url') || GAS_DEFAULT;
+}
+
+// ===== GAS連携 =====
+function saveGasUrl(){
+  const url = document.getElementById('gasUrl').value.trim();
+  if(!url){ alert('URLを入力してください'); return; }
+  localStorage.setItem('gas_url', url);
+  document.getElementById('gasStatus').textContent = '✅ 保存しました';
+  document.getElementById('gasStatus').style.color = 'var(--success)';
+}
+
+async function testGasUrl(){
+  const url = localStorage.getItem('gas_url');
+  if(!url){ alert('先にURLを保存してください'); return; }
+  const status = document.getElementById('gasStatus');
+  status.textContent = '🔄 接続中...';
+  status.style.color = 'var(--text2)';
+  try {
+    const res = await fetch(url + '?action=list');
+    const data = await res.json();
+    if(data.ok !== undefined){
+      status.textContent = '✅ 接続成功！';
+      status.style.color = 'var(--success)';
+    } else {
+      status.textContent = '⚠️ 応答エラー';
+      status.style.color = 'var(--warning)';
+    }
+  } catch(e) {
+    status.textContent = '❌ 接続失敗: ' + e.message;
+    status.style.color = 'var(--danger)';
+  }
+}
+
+async function sendToGas(order){
+  const url = localStorage.getItem('gas_url');
+  if(!url) return null;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({action: order.id ? 'update' : 'save', order})
+    });
+    return await res.json();
+  } catch(e) {
+    console.error('GAS送信エラー:', e);
+    return null;
+  }
+}
+
+// Enterキー対応
+['master-new-sk-work','master-new-sk-option','master-new-sk-other'].forEach(id=>{
+  const el=document.getElementById(id); if(!el)return;
+  const map={'master-new-sk-work':['works','master-new-sk-work'],'master-new-sk-option':['options','master-new-sk-option'],'master-new-sk-other':['others','master-new-sk-other']};
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();skMasterAdd(map[id][0],map[id][1]);}});
+});
+
+// ===== PHOTOS =====
+function addPhotos(key, e) {
+  const arr = key==='syakenPhotos' ? skPhotos : (key==='photos' ? photos : deliveryPhotos);
+  const gridId = {photos:'photoGrid', deliveryPhotos:'deliveryGrid', syakenPhotos:'syakenPhotoGrid'}[key];
+  Array.from(e.target.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => { arr.push(ev.target.result); renderAnyPhotos(key, arr, gridId); };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+function renderAnyPhotos(key, arr, gridId) {
+  const grid = document.getElementById(gridId); if(!grid)return;
+  grid.innerHTML = arr.map((src,i) =>
+    `<div class="photo-thumb"><img src="${src}"><button class="photo-remove" onclick="removeAnyPhoto('${key}',${i})">✕</button></div>`
+  ).join('');
+}
+function removeAnyPhoto(key, i) {
+  const arr = key==='syakenPhotos'?skPhotos:(key==='photos'?photos:deliveryPhotos);
+  arr.splice(i,1);
+  const gridId={photos:'photoGrid',deliveryPhotos:'deliveryGrid',syakenPhotos:'syakenPhotoGrid'}[key];
+  renderAnyPhotos(key, arr, gridId);
+}
+
+// ===== SIGNATURE =====
+const canvas = document.getElementById('sigCanvas');
+const ctx = canvas.getContext('2d');
+const sigWrap = document.getElementById('sigWrap');
+const sigHint = document.getElementById('sigHint');
+let drawing = false, lastX = 0, lastY = 0, penSize = 1.5, hasSigned = false;
+ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+function setPenSize(size, btnId) {
+  penSize = size;
+  document.querySelectorAll('.pen-size-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById(btnId).classList.add('selected');
+}
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const sx = canvas.width/r.width, sy = canvas.height/r.height;
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  return {x:(cx-r.left)*sx, y:(cy-r.top)*sy, pressure: e.pressure>0?e.pressure:0.5};
+}
+function onStart(e) {
+  e.preventDefault(); drawing=true;
+  const p=getPos(e); lastX=p.x; lastY=p.y;
+  if (!hasSigned){hasSigned=true;sigHint.classList.add('hidden');sigWrap.classList.add('active');}
+}
+function onMove(e) {
+  e.preventDefault(); if(!drawing)return;
+  const p=getPos(e);
+  ctx.beginPath();ctx.moveTo(lastX,lastY);ctx.lineTo(p.x,p.y);
+  ctx.strokeStyle='#1a1a2e';ctx.lineWidth=penSize*(0.5+p.pressure*1.5);ctx.stroke();
+  lastX=p.x;lastY=p.y;
+}
+canvas.addEventListener('pointerdown',onStart,{passive:false});
+canvas.addEventListener('pointermove',onMove,{passive:false});
+['pointerup','pointercancel','pointerleave'].forEach(ev=>canvas.addEventListener(ev,()=>drawing=false));
+function clearSig(){ctx.clearRect(0,0,canvas.width,canvas.height);hasSigned=false;sigHint.classList.remove('hidden');sigWrap.classList.remove('active');}
+function getSigData(){return canvas.toDataURL();}
+function resizeCanvas(){const w=canvas.parentElement.clientWidth;if(w>0){canvas.style.width=w+'px';canvas.style.height=Math.round(w*320/1400)+'px';}}
+window.addEventListener('resize',resizeCanvas);resizeCanvas();
+
+// ===== ORDER NUMBER =====
+function genOrderNum(){
+  const n=new Date();
+  return 'WO-'+n.getFullYear().toString().slice(2)+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0')+'-'+String(orders.length+1).padStart(3,'0');
+}
+
+// ===== SAVE =====
+async function saveOrder(){
+  const custName=document.getElementById('custName').value.trim();
+  const carName=document.getElementById('carName').value.trim();
+  if(!custName||!carName){alert('顧客氏名・車名は必須です');return;}
+  const order={
+    id:editingId||Date.now(),
+    orderNum:editingId?(orders.find(o=>o.id===editingId)?.orderNum||genOrderNum()):genOrderNum(),
+    status:currentStatus,
+    custName,custPhone:document.getElementById('custPhone').value,
+    carName,carYear:document.getElementById('carYear').value,
+    carPlate:document.getElementById('carPlate').value,
+    dateIn:document.getElementById('dateIn').value,
+    dateOut:document.getElementById('dateOut').value,
+    mechName:document.getElementById('mechName').value,
+    receptionName:document.getElementById('receptionName').value,
+    checkState:JSON.parse(JSON.stringify(checkState)),
+    remarks:document.getElementById('remarks').value,
+    photos,deliveryPhotos,
+    signature:getSigData(),
+    savedAt:new Date().toISOString()
+  };
+  if(editingId){const idx=orders.findIndex(o=>o.id===editingId);if(idx>=0)orders[idx]=order;}
+  else orders.push(order);
+  localStorage.setItem('sagyou_orders',JSON.stringify(orders));
+
+  // GASに送信
+  const gasUrl = localStorage.getItem('gas_url');
+  if(gasUrl){
+    try {
+      await fetch(gasUrl, {method:'POST', body:JSON.stringify({action: editingId?'update':'save', order})});
+    } catch(e){ console.error('GAS送信エラー:', e); }
+  }
+
+  alert('✅ 保存しました！\n指示書番号: '+order.orderNum);
+  clearForm();showPage('list');
+}
+
+// ===== CLEAR =====
+function clearForm(){
+  editingId=null;
+  ['custName','custPhone','carName','carYear','carPlate','dateIn','dateOut','mechName','receptionName','remarks'].forEach(id=>document.getElementById(id).value='');
+  photos=[];deliveryPhotos=[];
+  renderPhotos('photos');renderPhotos('deliveryPhotos');
+  clearSig();setStatus('waiting','作業待ち');
+  initCheckState();SECTIONS.forEach(sec=>renderChecklist(sec));
+  document.getElementById('currentOrderNum').textContent='';
+}
+
+// ===== LIST =====
+const statusMap={waiting:['作業待ち','badge-waiting'],inprogress:['作業中','badge-inprogress'],parts:['部品待ち','badge-parts'],done:['作業完了','badge-done'],delivered:['納車済み','badge-delivered']};
+function renderList(){
+  const q=document.getElementById('searchInput').value.trim().toLowerCase();
+  const list=document.getElementById('orderList');
+  const filtered=orders.filter(o=>!q||o.custName.toLowerCase().includes(q)||o.carName.toLowerCase().includes(q)).slice().reverse();
+  if(!filtered.length){list.innerHTML='<div class="empty-state"><div class="icon">📋</div><div>作業指示書がありません</div></div>';return;}
+  list.innerHTML=filtered.map(o=>{
+    const[label,cls]=statusMap[o.status]||['不明','badge-waiting'];
+    return`<div class="order-card" onclick="editOrder(${o.id})"><div class="order-num">${o.orderNum}</div><div class="order-info"><div class="car">${esc(o.carName)} ${o.carYear||''}</div><div class="customer">${esc(o.custName)}${o.carPlate?' / '+o.carPlate:''}</div></div><span class="badge ${cls}">${label}</span><div class="order-date">${o.dateIn||''}<br><span style="font-size:11px;color:var(--text2)">${o.mechName||''}</span></div></div>`;
+  }).join('');
+}
+
+// ===== EDIT =====
+function editOrder(id){
+  const o=orders.find(o=>o.id===id);if(!o)return;
+  editingId=id;showPage('new');
+  ['custName','custPhone','carName','carYear','carPlate','dateIn','dateOut','mechName','receptionName','remarks'].forEach(fid=>{document.getElementById(fid).value=o[fid]||'';});
+  if(o.checkState){
+    checkState=JSON.parse(JSON.stringify(o.checkState));
+    SECTIONS.forEach(sec=>{
+      const existing=new Set(checkState[sec].map(i=>i.label));
+      masterItems[sec].forEach(label=>{if(!existing.has(label))checkState[sec].push({label,checked:false});});
+    });
+  }else{initCheckState();}
+  SECTIONS.forEach(sec=>renderChecklist(sec));
+  photos=o.photos||[];deliveryPhotos=o.deliveryPhotos||[];
+  renderPhotos('photos');renderPhotos('deliveryPhotos');
+  setStatus(o.status,(statusMap[o.status]||[''])[0]);
+  document.getElementById('currentOrderNum').textContent=o.orderNum;
+  document.getElementById('printOrderNum').textContent=o.orderNum;
+  if(o.signature){const img=new Image();img.onload=()=>{clearSig();ctx.drawImage(img,0,0);hasSigned=true;sigHint.classList.add('hidden');};img.src=o.signature;}else{clearSig();}
+  window.scrollTo(0,0);
+}
+
+// ===================================================
+// 車検フォーム
+// ===================================================
+
+// デフォルト項目（初回のみ使用）
+const SK_DEFAULT_OPTIONS = ['ECUシステム診断','スチーム洗車','シャシーブラック','ホイール塗装','DPFマフラー洗浄'];
+const SK_DEFAULT_WORKS   = ['エンジンオイル交換','オイルエレメント交換','エアーエレメント交換','燃料エレメント（メイン）交換','燃料エレメント（サブ）交換','PCVエレメント交換','尿素水フィルター交換','ミッションオイル交換','デフオイル交換','クラッチオイル交換','ホイールシリンダーO/H','エアードライヤーO/H','キャリバーO/H','ブレーキホース交換','ブレーキフルード交換','タイヤローテーション','ワイパーゴム交換','バッテリー交換','クーラント交換','ファンベルト交換'];
+const SK_DEFAULT_OTHERS  = ['ペダルパット','発煙筒','バッテリー比重・充電'];
+
+// localStorage からマスター読み込み（なければデフォルト）
+function loadSkMaster(){
+  const saved = localStorage.getItem('sk_master_items');
+  if(saved) return JSON.parse(saved);
+  return { options: [...SK_DEFAULT_OPTIONS], works: [...SK_DEFAULT_WORKS], others: [...SK_DEFAULT_OTHERS] };
+}
+let skMaster = loadSkMaster();
+
+let skInitDone=false, skPhotos=[], skOrders=JSON.parse(localStorage.getItem('syaken_orders')||'[]'), skEditingId=null;
+let skOptionState={}, skWorkState={}, skOtherState={};
+let skDrawing=false, skLastX=0, skLastY=0, skPenSize=1.5, skHasSigned=false;
+let skCanvas, skCtx, skSigWrap, skSigHint;
+
+function skInitIfNeeded(){
+  if(skInitDone)return; skInitDone=true;
+  skResetState(); skBuildOptions(); skBuildWorks(); skBuildOthers(); skInitSig();
+  updateStaffSelects();
+}
+
+function skResetState(){
+  skMaster = loadSkMaster();
+  skOptionState={}; skMaster.options.forEach(l=>skOptionState[l]=null);
+  skWorkState={};   skMaster.works.forEach(l=>skWorkState[l]=null);
+  skOtherState={};  skMaster.others.forEach(l=>skOtherState[l]=null);
+}
+
+function skBuildOptions(){
+  const grid=document.getElementById('sk-options-grid'); if(!grid)return; grid.innerHTML='';
+  skMaster.options.forEach(label=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;';
+    row.innerHTML=`<span style="flex:1;font-size:14px;font-weight:700">${esc(label)}</span>
+      <button class="sk-opt-btn" data-label="${esc(label)}" data-val="required" onclick="skSetOption('${esc(label)}','required')" style="padding:6px 16px;border-radius:20px;border:2px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;">要</button>
+      <button class="sk-opt-btn" data-label="${esc(label)}" data-val="not_required" onclick="skSetOption('${esc(label)}','not_required')" style="padding:6px 16px;border-radius:20px;border:2px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;">不要</button>`;
+    grid.appendChild(row);
+  });
+}
+
+function skSetOption(label,val){
+  skOptionState[label]=val;
+  document.querySelectorAll(`.sk-opt-btn[data-label="${label}"]`).forEach(btn=>{
+    const ok=btn.dataset.val===val;
+    btn.style.background=ok?(val==='required'?'rgba(46,204,113,.2)':'rgba(231,76,60,.2)'):'transparent';
+    btn.style.borderColor=ok?(val==='required'?'var(--success)':'var(--danger)'):'var(--border)';
+    btn.style.color=ok?(val==='required'?'var(--success)':'var(--danger)'):'var(--text2)';
+  });
+}
+
+function skBuildWorks(){
+  const grid=document.getElementById('sk-works-grid'); if(!grid)return; grid.innerHTML='';
+  skMaster.works.forEach(label=>{
+    const cell=document.createElement('div');
+    cell.style.cssText='background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;';
+    cell.innerHTML=`<div style="font-size:13px;font-weight:700;margin-bottom:8px;">${esc(label)}</div>
+      <div style="display:flex;gap:6px;">
+        ${[['not_required','不要','var(--danger)','rgba(231,76,60,.2)'],['supply','支給','var(--warning)','rgba(243,156,18,.2)'],['required','要','var(--success)','rgba(46,204,113,.2)']].map(([v,t,c,bg])=>
+          `<button class="sk-work-btn" data-label="${esc(label)}" data-val="${v}" onclick="skSetWork('${esc(label)}','${v}')"
+            style="flex:1;padding:5px 4px;border-radius:6px;border:2px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;">${t}</button>`
+        ).join('')}
+      </div>`;
+    grid.appendChild(cell);
+  });
+}
+
+function skSetWork(label,val){
+  skWorkState[label]=val;
+  const colors={not_required:['var(--danger)','rgba(231,76,60,.2)'],supply:['var(--warning)','rgba(243,156,18,.2)'],required:['var(--success)','rgba(46,204,113,.2)']};
+  document.querySelectorAll(`.sk-work-btn[data-label="${label}"]`).forEach(btn=>{
+    const ok=btn.dataset.val===val;
+    btn.style.borderColor=ok?colors[val][0]:'var(--border)';
+    btn.style.background=ok?colors[val][1]:'transparent';
+    btn.style.color=ok?colors[val][0]:'var(--text2)';
+  });
+}
+
+function skBuildOthers(){
+  const grid=document.getElementById('sk-others-grid'); if(!grid)return; grid.innerHTML='';
+  skMaster.others.forEach(label=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;';
+    row.innerHTML=`<span style="flex:1;font-size:14px;font-weight:700">${esc(label)}</span>
+      <span style="font-size:12px;color:var(--text2);margin-right:4px;">点検・交換</span>
+      <button class="sk-other-btn" data-label="${esc(label)}" data-val="inspect" onclick="skSetOther('${esc(label)}','inspect')" style="padding:6px 14px;border-radius:20px;border:2px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;">点検</button>
+      <button class="sk-other-btn" data-label="${esc(label)}" data-val="replace" onclick="skSetOther('${esc(label)}','replace')" style="padding:6px 14px;border-radius:20px;border:2px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;">交換</button>`;
+    grid.appendChild(row);
+  });
+}
+
+function skSetOther(label,val){
+  skOtherState[label]=val;
+  document.querySelectorAll(`.sk-other-btn[data-label="${label}"]`).forEach(btn=>{
+    const ok=btn.dataset.val===val;
+    btn.style.background=ok?'rgba(46,204,113,.2)':'transparent';
+    btn.style.borderColor=ok?'var(--success)':'var(--border)';
+    btn.style.color=ok?'var(--success)':'var(--text2)';
+  });
+}
+
+function skInitSig(){
+  skCanvas=document.getElementById('sk-sigCanvas'); if(!skCanvas)return;
+  skCtx=skCanvas.getContext('2d');
+  skSigWrap=document.getElementById('sk-sigWrap');
+  skSigHint=document.getElementById('sk-sigHint');
+  skCtx.lineCap='round'; skCtx.lineJoin='round';
+  skCanvas.addEventListener('pointerdown',e=>{e.preventDefault();skDrawing=true;const p=skGetPos(e);skLastX=p.x;skLastY=p.y;if(!skHasSigned){skHasSigned=true;skSigHint.classList.add('hidden');skSigWrap.classList.add('active');}},{passive:false});
+  skCanvas.addEventListener('pointermove',e=>{e.preventDefault();if(!skDrawing)return;const p=skGetPos(e);skCtx.beginPath();skCtx.moveTo(skLastX,skLastY);skCtx.lineTo(p.x,p.y);skCtx.strokeStyle='#1a1a2e';skCtx.lineWidth=skPenSize*(0.5+p.pressure*1.5);skCtx.stroke();skLastX=p.x;skLastY=p.y;},{passive:false});
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>skCanvas.addEventListener(ev,()=>skDrawing=false));
+  skResizeCanvas();
+}
+function skGetPos(e){const r=skCanvas.getBoundingClientRect();return{x:(e.clientX-r.left)*skCanvas.width/r.width,y:(e.clientY-r.top)*skCanvas.height/r.height,pressure:e.pressure>0?e.pressure:0.5};}
+function skResizeCanvas(){if(!skCanvas)return;const w=skCanvas.parentElement.clientWidth;if(w>0){skCanvas.style.width=w+'px';skCanvas.style.height=Math.round(w*320/1400)+'px';}}
+function skSetPenSize(size,btnId){skPenSize=size;document.querySelectorAll('.pen-size-btn').forEach(b=>b.classList.remove('selected'));document.getElementById(btnId).classList.add('selected');}
+function skClearSig(){if(!skCtx)return;skCtx.clearRect(0,0,skCanvas.width,skCanvas.height);skHasSigned=false;if(skSigHint)skSigHint.classList.remove('hidden');if(skSigWrap)skSigWrap.classList.remove('active');}
+
+function genSkOrderNum(){const n=new Date();return 'SK-'+n.getFullYear().toString().slice(2)+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0')+'-'+String(skOrders.length+1).padStart(3,'0');}
+
+function skSave(){
+  const userName=document.getElementById('sk-userName').value.trim();
+  const carName=document.getElementById('sk-carName').value.trim();
+  if(!userName||!carName){alert('ユーザー名・車輌名は必須です');return;}
+  const order={
+    id:skEditingId||Date.now(),
+    orderNum:skEditingId?(skOrders.find(o=>o.id===skEditingId)?.orderNum||genSkOrderNum()):genSkOrderNum(),
+    type:'syaken', userName, carName,
+    plateNum:document.getElementById('sk-plateNum').value,
+    chassisNum:document.getElementById('sk-chassisNum').value,
+    mileage:document.getElementById('sk-mileage').value,
+    engineType:document.getElementById('sk-engineType').value,
+    estimate:document.getElementById('sk-estimate').value,
+    manager:document.getElementById('sk-manager').value,
+    inspector:document.getElementById('sk-inspector').value,
+    visitDate:document.getElementById('sk-visitDate').value,
+    completeDate:document.getElementById('sk-completeDate').value,
+    deliveryDate:document.getElementById('sk-deliveryDate').value,
+    optionState:JSON.parse(JSON.stringify(skOptionState)),
+    workState:JSON.parse(JSON.stringify(skWorkState)),
+    otherState:JSON.parse(JSON.stringify(skOtherState)),
+    kitMaintenance:document.getElementById('sk-kitMaintenance').value,
+    kitSeal:document.getElementById('sk-kitSeal').value,
+    userRemarks:document.getElementById('sk-userRemarks').value,
+    inspectionRemarks:document.getElementById('sk-inspectionRemarks').value,
+    photos:skPhotos,
+    signature:skCanvas?skCanvas.toDataURL():'',
+    savedAt:new Date().toISOString()
+  };
+  if(skEditingId){const idx=skOrders.findIndex(o=>o.id===skEditingId);if(idx>=0)skOrders[idx]=order;}
+  else skOrders.push(order);
+  localStorage.setItem('syaken_orders',JSON.stringify(skOrders));
+  alert('✅ 車検指示書を保存しました！\n指示書番号: '+order.orderNum);
+  skClearForm();
+}
+
+function skClearForm(){
+  skEditingId=null;
+  ['sk-userName','sk-carName','sk-plateNum','sk-chassisNum','sk-mileage','sk-engineType','sk-manager','sk-inspector','sk-kitMaintenance','sk-kitSeal','sk-userRemarks','sk-inspectionRemarks'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('sk-estimate').value='';
+  ['sk-visitDate','sk-completeDate','sk-deliveryDate'].forEach(id=>document.getElementById(id).value='');
+  skPhotos=[];
+  const g=document.getElementById('syakenPhotoGrid');if(g)g.innerHTML='';
+  skClearSig(); skResetState(); skBuildOptions(); skBuildWorks(); skBuildOthers();
+  document.getElementById('syakenOrderNum').textContent='';
+}
+
+</script>
+</body>
+</html>
