@@ -1280,13 +1280,10 @@ async function testGas() {
 async function gasPost(data) {
   if (!S.gasUrl) return false;
   try {
-    const params = new URLSearchParams({
-      action: data.action,
-      data: JSON.stringify(data.order || data)
-    });
-    await fetch(S.gasUrl + '?' + params.toString(), {
-      method: 'GET', mode: 'no-cors'
-    });
+    const order = data.order || data;
+    const url = S.gasUrl + '?action=' + encodeURIComponent(data.action) + '&data=' + encodeURIComponent(JSON.stringify(order));
+    const img = new Image();
+    img.src = url;
     return true;
   } catch(e) { return false; }
 }
