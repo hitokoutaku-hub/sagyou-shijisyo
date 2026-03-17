@@ -169,21 +169,14 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
 </style>
 
 <!-- Firebase -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import { getDatabase, ref, set, onValue, push } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-  
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
   const firebaseConfig = {
     databaseURL: "https://sagyou-shijisho-default-rtdb.asia-southeast1.firebasedatabase.app"
   };
-  
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  window.firebaseDb = db;
-  window.firebaseRef = ref;
-  window.firebaseSet = set;
-  window.firebasePush = push;
-  window.firebaseOnValue = onValue;
+  firebase.initializeApp(firebaseConfig);
+  window.firebaseDb = firebase.database();
   window.firebaseReady = true;
   console.log("Firebase ready!");
 </script>
@@ -1303,11 +1296,7 @@ async function gasPost(data) {
   // Firebase保存
   if (window.firebaseReady && window.firebaseDb) {
     try {
-      const db = window.firebaseDb;
-      const refFn = window.firebaseRef;
-      const setFn = window.firebaseSet;
-      const orderRef = refFn(db, 'orders/' + order.id);
-      await setFn(orderRef, order);
+      await window.firebaseDb.ref('orders/' + order.id).set(order);
       console.log('Firebase保存成功:', order.orderNum);
       return true;
     } catch(e) {
@@ -1350,11 +1339,7 @@ function initFirebase(url) {
 async function loadFirebaseOrders() {
   if (!window.firebaseReady || !window.firebaseDb) return;
   try {
-    const db = window.firebaseDb;
-    const refFn = window.firebaseRef;
-    const onValueFn = window.firebaseOnValue;
-    const ordersRef = refFn(db, 'orders');
-    onValueFn(ordersRef, (snapshot) => {
+    window.firebaseDb.ref('orders').on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const firebaseOrders = Object.values(data);
