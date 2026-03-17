@@ -168,18 +168,7 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
 .inp-wrap input { padding-right: 44px; }
 </style>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script>
-  const firebaseConfig = {
-    databaseURL: "https://sagyou-shijisho-default-rtdb.asia-southeast1.firebasedatabase.app"
-  };
-  firebase.initializeApp(firebaseConfig);
-  window.firebaseDb = firebase.database();
-  window.firebaseReady = true;
-  console.log("Firebase ready!");
-</script>
+
 
 </head>
 <body>
@@ -1291,77 +1280,8 @@ async function testGas() {
 }
 
 async function gasPost(data) {
-  const order = data.order || data;
-  
-  // Firebase保存
-  if (window.firebaseReady && window.firebaseDb) {
-    try {
-      await window.firebaseDb.ref('orders/' + order.id).set(order);
-      console.log('Firebase保存成功:', order.orderNum);
-      return true;
-    } catch(e) {
-      console.error('Firebase保存エラー:', e);
-    }
-  }
-  
-  // GAS保存（フォールバック）
-  if (S.gasUrl) {
-    try {
-      let iframe = document.getElementById('gasIframe');
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = 'gasIframe';
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-      }
-      const url = S.gasUrl + '?action=' + encodeURIComponent(data.action)
-        + '&id=' + encodeURIComponent(order.id||'')
-        + '&orderNum=' + encodeURIComponent(order.orderNum||'')
-        + '&custName=' + encodeURIComponent(order.custName||'')
-        + '&carName=' + encodeURIComponent(order.carName||'')
-        + '&status=' + encodeURIComponent(order.status||'')
-        + '&dateIn=' + encodeURIComponent(order.dateIn||'');
-      iframe.src = url;
-    } catch(e) {}
-  }
-  
+  // Firebase・GASへの送信（今後対応予定）
   return true;
-}
-
-// Firebase初期化（設定タブから）
-function initFirebase(url) {
-  if (!url) return;
-  S.firebaseUrl = url;
-  saveState();
-}
-
-// Firebase一覧読み込み
-async function loadFirebaseOrders() {
-  if (!window.firebaseReady || !window.firebaseDb) return;
-  try {
-    window.firebaseDb.ref('orders').on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const firebaseOrders = Object.values(data);
-        // ローカルにないものをマージ
-        const localIds = new Set(S.orders.map(o => o.id));
-        let updated = false;
-        firebaseOrders.forEach(order => {
-          if (!localIds.has(order.id)) {
-            S.orders.push(order);
-            updated = true;
-          }
-        });
-        if (updated) {
-          S.orders.sort((a, b) => b.id - a.id);
-          saveState();
-          loadList();
-        }
-      }
-    });
-  } catch(e) {
-    console.error('Firebase読み込みエラー:', e);
-  }
 }
 
 // ========== PHOTO PREVIEW ==========
@@ -1812,10 +1732,6 @@ function init() {
   const skDate = document.getElementById('sk-dateIn');
   if (rDate) rDate.value = today;
   if (skDate) skDate.value = today;
-  const acDate = document.getElementById('ac-dateIn');
-  if (acDate) acDate.value = today;
-  // Firebase一覧同期
-  setTimeout(() => loadFirebaseOrders(), 2000);
   const acDate = document.getElementById('ac-dateIn');
   if (acDate) acDate.value = today;
 }
