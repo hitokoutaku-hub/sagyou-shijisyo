@@ -1282,15 +1282,18 @@ async function gasPost(data) {
   try {
     const order = data.order || data;
     const jsonStr = JSON.stringify(order);
-    // Base64エンコードして送信（特殊文字を回避）
-    const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
-    const url = S.gasUrl + '?action=' + data.action + '&encoded=1&data=' + encodeURIComponent(encoded);
-    const script = document.createElement('script');
-    script.src = url;
-    document.head.appendChild(script);
-    setTimeout(() => {
-      try { document.head.removeChild(script); } catch(e) {}
-    }, 5000);
+    const encoded = encodeURIComponent(jsonStr);
+    const url = S.gasUrl + '?action=' + data.action + '&data=' + encoded;
+    
+    // iframeで送信（CORSを回避）
+    let iframe = document.getElementById('gasIframe');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'gasIframe';
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+    iframe.src = url;
     return true;
   } catch(e) { return false; }
 }
