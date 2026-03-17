@@ -1280,15 +1280,24 @@ async function testGas() {
 async function gasPost(data) {
   if (!S.gasUrl) return false;
   try {
-    const form = new FormData();
-    form.append('action', data.action);
-    form.append('data', JSON.stringify(data.order || data));
-    await fetch(S.gasUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: form
+    const order = data.order || data;
+    const url = S.gasUrl 
+      + '?action=' + encodeURIComponent(data.action) 
+      + '&data=' + encodeURIComponent(JSON.stringify(order))
+      + '&callback=gasCallback_' + Date.now();
+    
+    return new Promise((resolve) => {
+      const cbName = 'gasCallback_' + Date.now();
+      window[cbName] = function() { delete window[cbName]; resolve(true); };
+      const script = document.createElement('script');
+      script.src = S.gasUrl 
+        + '?action=' + encodeURIComponent(data.action) 
+        + '&data=' + encodeURIComponent(JSON.stringify(order))
+        + '&callback=' + cbName;
+      script.onerror = function() { resolve(false); };
+      document.head.appendChild(script);
+      setTimeout(() => resolve(true), 3000);
     });
-    return true;
   } catch(e) { return false; }
 }
 
