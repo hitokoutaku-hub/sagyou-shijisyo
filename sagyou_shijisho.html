@@ -1281,11 +1281,44 @@ async function gasPost(data) {
   if (!S.gasUrl) return false;
   try {
     const order = data.order || data;
-    const jsonStr = JSON.stringify(order);
-    const encoded = encodeURIComponent(jsonStr);
-    const url = S.gasUrl + '?action=' + data.action + '&data=' + encoded;
+    // データを小さく分割して送信
+    const payload = {
+      id: order.id,
+      orderNum: order.orderNum,
+      type: order.type,
+      status: order.status,
+      custName: order.custName,
+      carName: order.carName,
+      carPlate: order.carPlate,
+      dateIn: order.dateIn,
+      dateOut: order.dateOut,
+      mechName: order.mechName,
+      receptionName: order.receptionName,
+      remarks: order.remarks,
+      insurance: order.insurance,
+      savedAt: order.savedAt,
+      carItems: order.carItems,
+      truckItems: order.truckItems,
+      noticeItems: order.noticeItems,
+      workItems: order.workItems,
+    };
+    const url = S.gasUrl 
+      + '?action=' + encodeURIComponent(data.action)
+      + '&id=' + encodeURIComponent(payload.id||'')
+      + '&orderNum=' + encodeURIComponent(payload.orderNum||'')
+      + '&type=' + encodeURIComponent(payload.type||'')
+      + '&status=' + encodeURIComponent(payload.status||'')
+      + '&custName=' + encodeURIComponent(payload.custName||'')
+      + '&carName=' + encodeURIComponent(payload.carName||'')
+      + '&carPlate=' + encodeURIComponent(payload.carPlate||'')
+      + '&dateIn=' + encodeURIComponent(payload.dateIn||'')
+      + '&dateOut=' + encodeURIComponent(payload.dateOut||'')
+      + '&mechName=' + encodeURIComponent(payload.mechName||'')
+      + '&receptionName=' + encodeURIComponent(payload.receptionName||'')
+      + '&remarks=' + encodeURIComponent((payload.remarks||'').substring(0,200))
+      + '&savedAt=' + encodeURIComponent(payload.savedAt||'');
     
-    // iframeで送信（CORSを回避）
+    // iframeで送信
     let iframe = document.getElementById('gasIframe');
     if (!iframe) {
       iframe = document.createElement('iframe');
