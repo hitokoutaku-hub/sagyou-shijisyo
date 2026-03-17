@@ -1340,6 +1340,7 @@ async function saveRepair() {
   S.orders.unshift(order);
   saveState();
   if (S.gasUrl) await gasPost({action:'save', order});
+  if (window._fbSave) window._fbSave(order);
   alert(`✅ 保存しました\n指示書番号: ${orderNum}`);
   clearRepair();
 }
@@ -1430,6 +1431,7 @@ async function saveAccident() {
   S.orders.unshift(order);
   saveState();
   if (S.gasUrl) await gasPost({action:'save', order});
+  if (window._fbSave) window._fbSave(order);
   alert(`✅ 事故修理指示書を保存しました\n指示書番号: ${orderNum}`);
   clearAccident();
 }
@@ -1484,6 +1486,7 @@ async function saveShakken() {
   S.orders.unshift(order);
   saveState();
   if (S.gasUrl) await gasPost({action:'save', order});
+  if (window._fbSave) window._fbSave(order);
   alert(`✅ 車検指示書を保存しました\n指示書番号: ${orderNum}`);
   clearShakken();
 }
@@ -1737,6 +1740,46 @@ function init() {
 }
 
 init();
+</script>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" defer></script>
+<script defer>
+window.addEventListener('load', function() {
+  try {
+    firebase.initializeApp({
+      databaseURL: "https://sagyou-shijisho-default-rtdb.asia-southeast1.firebasedatabase.app"
+    });
+    window._fbDb = firebase.database();
+    window._fbReady = true;
+    console.log('Firebase OK');
+    // 他端末のデータをマージ
+    window._fbDb.ref('orders').once('value', function(snap) {
+      var data = snap.val();
+      if (!data) return;
+      var ids = new Set(S.orders.map(function(o){ return o.id; }));
+      var added = false;
+      Object.values(data).forEach(function(o) {
+        if (!ids.has(o.id)) { S.orders.push(o); added = true; }
+      });
+      if (added) {
+        S.orders.sort(function(a,b){ return b.id - a.id; });
+        saveState();
+        loadList();
+        console.log('Firebase: 他端末データをマージしました');
+      }
+    });
+  } catch(e) { console.log('Firebase init skip:', e.message); }
+});
+
+window._fbSave = function(order) {
+  if (!window._fbReady || !window._fbDb) return;
+  try {
+    window._fbDb.ref('orders/' + order.id).set(order);
+    console.log('Firebase保存:', order.orderNum);
+  } catch(e) { console.log('Firebase保存エラー:', e.message); }
+};
 </script>
 
 </body>
