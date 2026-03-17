@@ -1281,10 +1281,23 @@ async function gasPost(data) {
   if (!S.gasUrl) return false;
   try {
     const order = data.order || data;
-    const url = S.gasUrl + '?action=' + encodeURIComponent(data.action) + '&data=' + encodeURIComponent(JSON.stringify(order));
-    const img = new Image();
-    img.src = url;
-    return true;
+    const url = S.gasUrl 
+      + '?action=' + encodeURIComponent(data.action) 
+      + '&data=' + encodeURIComponent(JSON.stringify(order))
+      + '&callback=gasCallback_' + Date.now();
+    
+    return new Promise((resolve) => {
+      const cbName = 'gasCallback_' + Date.now();
+      window[cbName] = function() { delete window[cbName]; resolve(true); };
+      const script = document.createElement('script');
+      script.src = S.gasUrl 
+        + '?action=' + encodeURIComponent(data.action) 
+        + '&data=' + encodeURIComponent(JSON.stringify(order))
+        + '&callback=' + cbName;
+      script.onerror = function() { resolve(false); };
+      document.head.appendChild(script);
+      setTimeout(() => resolve(true), 3000);
+    });
   } catch(e) { return false; }
 }
 
