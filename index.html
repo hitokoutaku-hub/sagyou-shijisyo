@@ -308,7 +308,9 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
         <button class="btn btn-sm btn-gray" onclick="clearFilter()">全件</button>
       </div>
       <div class="filter-bar" style="margin-top:6px">
-        <input type="date" id="filterDate" onchange="loadList()" style="flex:none;width:150px" />
+        <select id="filterMonth" onchange="loadList()" style="flex:1;min-width:120px">
+          <option value="">全月</option>
+        </select>
         <select id="filterStatus" onchange="loadList()">
           <option value="">全ステータス</option>
           <option>入庫中</option><option>作業中</option><option>完了</option><option>引渡済</option><option>車検中</option>
@@ -1902,6 +1904,32 @@ function clearShakken() {
 }
 
 // ========== LIST ==========
+function updateMonthFilter() {
+  const sel = document.getElementById('filterMonth');
+  if (!sel) return;
+  const current = sel.value;
+
+  // 全データから月一覧を生成
+  const months = new Set();
+  S.orders.forEach(o => {
+    const d = o.dateIn || '';
+    if (d && d.length >= 7) months.add(d.substring(0, 7));
+  });
+
+  const sorted = Array.from(months).sort().reverse();
+  sel.innerHTML = '<option value="">全月</option>' +
+    sorted.map(m => {
+      const [y, mo] = m.split('-');
+      return `<option value="${m}" ${m === current ? 'selected' : ''}>${y}年${parseInt(mo)}月</option>`;
+    }).join('');
+
+  // デフォルトで今月を選択（初回のみ）
+  if (!current && sorted.length > 0) {
+    const today = new Date().toISOString().substring(0, 7);
+    if (sorted.includes(today)) sel.value = today;
+  }
+}
+
 function clearFilter() {
   document.getElementById('filterDate').value = '';
   document.getElementById('filterStatus').value = '';
@@ -1922,13 +1950,19 @@ async function loadList() {
     }
   }
 
-  const filterDate = document.getElementById('filterDate')?.value;
+  const filterMonth = document.getElementById('filterMonth')?.value;
   const filterStatus = document.getElementById('filterStatus')?.value;
   const filterKeyword = document.getElementById('filterKeyword')?.value.trim();
   const filterType = document.getElementById('filterType')?.value;
 
+  // 月選択リストを更新
+  updateMonthFilter();
+
   let orders = [...S.orders];
-  if (filterDate) orders = orders.filter(o => o.dateIn === filterDate);
+  if (filterMonth) orders = orders.filter(o => {
+    const d = o.dateIn || o.savedAt || '';
+    return d.startsWith(filterMonth);
+  });
   if (filterStatus) orders = orders.filter(o => o.status === filterStatus);
   if (filterType) orders = orders.filter(o => o.type === filterType);
   if (filterKeyword) {
