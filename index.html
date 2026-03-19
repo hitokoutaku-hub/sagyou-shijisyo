@@ -2241,8 +2241,7 @@ function sendLineReport(orderId) {
   // 写真がチェックされていればダウンロード
   if (checked.length > 0) {
     setTimeout(() => {
-      if (confirm('選択した写真(' + checked.length + '枚)をダウンロードしますか？
-LINEに添付してください。')) {
+     if (confirm('選択した写真(' + checked.length + '枚)をダウンロードしますか？LINEに添付してください。')) {
         downloadSelectedPhotos();
       }
     }, 500);
