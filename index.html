@@ -2226,20 +2226,13 @@ function sendLineReport(orderId) {
   // 選択した写真を確認
   const checked = document.querySelectorAll('[id^="photo-check-"]:checked');
 
-  let text = '【整備作業報告】
-';
-  text += '────────────
-';
-  if (order.custName) text += '顧客名: ' + order.custName + '
-';
-  if (order.carName) text += '車名: ' + order.carName + '
-';
-  if (order.carPlate) text += 'ナンバー: ' + order.carPlate + '
-';
-  if (order.remarks) text += '────────────
-備考:
-' + order.remarks + '
-';
+ let text = '【整備作業報告】\n';
+    text += '——————\n';
+    if (order.custName) text += '顧客名: ' + order.custName + '\n';
+    if (order.carName) text += '車名: ' + order.carName + '\n';
+    if (order.carPlate) text += 'ナンバー: ' + order.carPlate + '\n';
+    if (order.remarks) text += '——————\n備考:\n' + order.remarks + '\n';
+    text += '——————';
   text += '────────────';
 
   // テキストをLINEで送る
