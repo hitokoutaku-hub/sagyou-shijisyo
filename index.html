@@ -2043,26 +2043,41 @@ async function openShijishoView(order) {
   let photoHtml = '';
   const photos = await loadPhotosForOrder(order.id);
   if (photos.length) {
-    const typeOrder = ['作業前','作業中','作業後','納品書'];
+    const typeOrder = ['作業前','作業中','作業後','納品書','写真'];
     const grouped = {};
     photos.forEach(p => {
       if (!grouped[p.photo_type]) grouped[p.photo_type] = [];
       grouped[p.photo_type].push(p);
     });
     let imgs = '';
+    // 全写真をフラットなリストに
+    const allPhotos = [];
     typeOrder.forEach(type => {
-      if (grouped[type]) {
-        grouped[type].forEach(p => {
-          imgs += `<div>
-            <div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">${type}</div>
-            <img src="${p.photo_b64}" style="width:100%;border-radius:10px;cursor:zoom-in;border:2px solid var(--border)"
-              title="右クリック→コピーでGATCHに貼り付けできます" />
-            <div style="color:var(--sub);font-size:10px;margin-top:3px;text-align:center">右クリック→コピーでGATCHに貼付可</div>
-          </div>`;
-        });
-      }
+      if (grouped[type]) grouped[type].forEach(p => allPhotos.push(p));
     });
-    photoHtml = shijishoSection('📷 写真', `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>`);
+    // 残りのタイプ
+    Object.keys(grouped).forEach(type => {
+      if (!typeOrder.includes(type)) grouped[type].forEach(p => allPhotos.push(p));
+    });
+
+    imgs = allPhotos.map((p, i) => `
+      <div style="position:relative">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}"
+            style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)" />
+          <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
+        </div>
+        <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" />
+      </div>`).join('');
+
+    photoHtml = shijishoSection('📷 写真', `
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(true)">✅ 全選択</button>
+        <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(false)">⬜ 全解除</button>
+        <button class="btn btn-primary btn-sm" onclick="downloadSelectedPhotos()">📥 選択した写真をダウンロード</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>
+    `);
   }
 
   const html = `
@@ -2077,6 +2092,7 @@ async function openShijishoView(order) {
         <span class="badge badge-${order.status}" style="font-size:13px;padding:5px 14px">${order.status}</span>
         <button class="btn btn-ok btn-sm" onclick="openAddPhotoModal('${order.id}')">📷 写真追加</button>
         <button class="btn btn-gray btn-sm" onclick="openManageModal('${order.id}')">⚙️ 管理</button>
+        <button class="btn btn-primary btn-sm" style="background:#06c755" onclick="sendLineReport('${order.id}')">💬 LINE送信</button>
         <button class="btn btn-primary btn-sm" onclick="closeShijishoView()">✕ 閉じる</button>
       </div>
     </div>
@@ -2203,12 +2219,69 @@ function tagList(items, color) {
   return `<div style="display:flex;flex-wrap:wrap;gap:6px">${items.map(i=>`<span style="background:rgba(240,160,48,0.15);border:1px solid ${color};border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:${color}">${i}</span>`).join('')}</div>`;
 }
 
+function sendLineReport(orderId) {
+  const order = S.orders.find(o => o.id === orderId);
+  if (!order) return;
+
+  // 選択した写真を確認
+  const checked = document.querySelectorAll('[id^="photo-check-"]:checked');
+
+  let text = '【整備作業報告】
+';
+  text += '────────────
+';
+  if (order.custName) text += '顧客名: ' + order.custName + '
+';
+  if (order.carName) text += '車名: ' + order.carName + '
+';
+  if (order.carPlate) text += 'ナンバー: ' + order.carPlate + '
+';
+  if (order.remarks) text += '────────────
+備考:
+' + order.remarks + '
+';
+  text += '────────────';
+
+  // テキストをLINEで送る
+  window.open('https://line.me/R/share?text=' + encodeURIComponent(text), '_blank');
+
+  // 写真がチェックされていればダウンロード
+  if (checked.length > 0) {
+    setTimeout(() => {
+      if (confirm('選択した写真(' + checked.length + '枚)をダウンロードしますか？
+LINEに添付してください。')) {
+        downloadSelectedPhotos();
+      }
+    }, 500);
+  }
+}
+
+function selectAllPhotos(checked) {
+  document.querySelectorAll('[id^="photo-check-"]').forEach(cb => cb.checked = checked);
+}
+
+function downloadSelectedPhotos() {
+  const checked = document.querySelectorAll('[id^="photo-check-"]:checked');
+  if (!checked.length) {
+    alert('写真を選択してください');
+    return;
+  }
+  checked.forEach((cb, i) => {
+    const b64 = cb.dataset.b64;
+    const type = cb.dataset.type || '写真';
+    const a = document.createElement('a');
+    a.href = b64;
+    a.download = `${type}_${i + 1}.jpg`;
+    a.click();
+  });
+}
+
 function closeShijishoView() {
   const el = document.getElementById('shijishoView');
   if (el) el.remove();
 }
 
-// 管理モーダル（ステータス変更・削除）
+// 管理モーダル（ステータス変更・編集・削除）
 function openManageModal(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
@@ -2223,6 +2296,9 @@ function openManageModal(id) {
           `<button class="btn btn-sm${order.status===s?' btn-primary':' btn-gray'}" onclick="changeStatus('${id}','${s}');closeManageModal()">${s}</button>`
         ).join('')}
       </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn btn-info btn-sm" style="flex:1" onclick="closeManageModal();openEditModal('${id}')">✏️ 編集</button>
+      </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteOrder('${id}');closeManageModal();closeShijishoView()">🗑️ 削除</button>
         <button class="btn btn-gray btn-sm" style="flex:1" onclick="closeManageModal()">キャンセル</button>
@@ -2234,6 +2310,87 @@ function openManageModal(id) {
 
 function closeManageModal() {
   const el = document.getElementById('manageModal');
+  if (el) el.remove();
+}
+
+// 編集モーダル
+function openEditModal(id) {
+  const order = S.orders.find(o => o.id === id);
+  if (!order) return;
+
+  const html = `
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;overflow-y:auto;padding:20px" id="editModal">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:640px;margin:auto">
+      <div style="color:var(--accent);font-size:16px;font-weight:800;margin-bottom:16px">✏️ 編集 - ${order.orderNum||''}</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">顧客名</label>
+          <input id="edit-custName" value="${order.custName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
+        </div>
+        <div>
+          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">車名</label>
+          <input id="edit-carName" value="${order.carName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
+        </div>
+        <div>
+          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">ナンバー</label>
+          <input id="edit-carPlate" value="${order.carPlate||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
+        </div>
+        <div>
+          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">出庫予定日</label>
+          <input type="date" id="edit-dateOut" value="${order.dateOut||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
+        </div>
+        <div>
+          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">担当整備士</label>
+          <input id="edit-mechName" value="${order.mechName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
+        </div>
+        <div>
+          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">受付担当</label>
+          <input id="edit-receptionName" value="${order.receptionName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px">
+        <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">備考・メモ</label>
+        <textarea id="edit-remarks" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;min-height:120px;resize:vertical;font-family:inherit">${order.remarks||''}</textarea>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:2" onclick="saveEdit('${id}')">💾 保存する</button>
+        <button class="btn btn-gray" style="flex:1" onclick="closeEditModal()">キャンセル</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function saveEdit(id) {
+  const order = S.orders.find(o => o.id === id);
+  if (!order) return;
+
+  order.custName = document.getElementById('edit-custName').value.trim();
+  order.carName = document.getElementById('edit-carName').value.trim();
+  order.carPlate = document.getElementById('edit-carPlate').value.trim();
+  order.dateOut = document.getElementById('edit-dateOut').value;
+  order.mechName = document.getElementById('edit-mechName').value.trim();
+  order.receptionName = document.getElementById('edit-receptionName').value.trim();
+  order.remarks = document.getElementById('edit-remarks').value;
+
+  saveState();
+  const ok = await sbSaveOrder(order);
+  if (ok) {
+    alert('✅ 更新しました！');
+    closeEditModal();
+    // ビューを再読み込み
+    closeShijishoView();
+    openShijishoView(order);
+  } else {
+    alert('⚠️ 更新に失敗しました');
+  }
+}
+
+function closeEditModal() {
+  const el = document.getElementById('editModal');
   if (el) el.remove();
 }
 
