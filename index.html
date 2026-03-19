@@ -215,7 +215,8 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
         <div>
           <label>顧客名</label>
           <div class="inp-wrap">
-            <input id="r-custName" placeholder="山田 太郎" inputmode="text" />
+            <input id="r-custName" placeholder="山田 太郎" inputmode="text" list="custNameList" oninput="onCustSelected('r-custName','r-carName')" />
+            <datalist id="custNameList"></datalist>
             <button class="expand-btn" onclick="openFs('r-custName','顧客名')">⛶</button>
           </div>
         </div>
@@ -225,7 +226,8 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
         <div>
           <label>車名</label>
           <div class="inp-wrap">
-            <input id="r-carName" placeholder="トヨタ プリウス" inputmode="text" />
+            <input id="r-carName" placeholder="トヨタ プリウス" inputmode="text" list="carNameList" />
+            <datalist id="carNameList"></datalist>
             <button class="expand-btn" onclick="openFs('r-carName','車名')">⛶</button>
           </div>
         </div>
@@ -521,6 +523,17 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
         <button class="btn btn-primary btn-sm" onclick="addStaff()">追加</button>
       </div>
       <div id="staffList" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🚗 顧客・車両登録</div>
+      <p style="color:var(--sub);font-size:12px;margin-bottom:10px">よく使う顧客名・車名を登録して入力時に選択できます</p>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="newCustName" placeholder="顧客名" style="flex:1" />
+        <input id="newCarName" placeholder="車名" style="flex:1" />
+        <button class="btn btn-primary btn-sm" onclick="addCustomer()">追加</button>
+      </div>
+      <div id="customerList" style="margin-top:10px"></div>
     </div>
 
     <div class="card">
@@ -1230,6 +1243,97 @@ function setSkWork(idx, opt) {
   renderSkItems();
 }
 
+// ========== MASTERS (Supabase共有) ==========
+async function addCustomer() {
+  const cust = document.getElementById('newCustName').value.trim();
+  const car = document.getElementById('newCarName').value.trim();
+  if (!cust && !car) return;
+  if (!sb) { alert('Supabaseに接続されていません'); return; }
+
+  const rows = [];
+  if (cust) rows.push({ category: 'customer', name: cust });
+  if (car) rows.push({ category: 'car', name: car });
+
+  try {
+    const { error } = await sb.from('sagyou_masters').insert(rows);
+    if (error) throw error;
+    document.getElementById('newCustName').value = '';
+    document.getElementById('newCarName').value = '';
+    await loadMasters();
+  } catch(e) {
+    alert('登録失敗: ' + e.message);
+  }
+}
+
+async function removeMaster(id) {
+  if (!sb) return;
+  try {
+    const { error } = await sb.from('sagyou_masters').delete().eq('id', id);
+    if (error) throw error;
+    await loadMasters();
+  } catch(e) {
+    alert('削除失敗: ' + e.message);
+  }
+}
+
+async function addStaffMaster() {
+  const name = document.getElementById('newStaff').value.trim();
+  if (!name || !sb) return;
+  try {
+    const { error } = await sb.from('sagyou_masters').insert([{ category: 'staff', name }]);
+    if (error) throw error;
+    document.getElementById('newStaff').value = '';
+    await loadMasters();
+  } catch(e) {
+    alert('登録失敗: ' + e.message);
+  }
+}
+
+async function loadMasters() {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('sagyou_masters').select('*').order('created_at');
+    if (error) throw error;
+
+    const staff = data.filter(d => d.category === 'staff');
+    const customers = data.filter(d => d.category === 'customer');
+    const cars = data.filter(d => d.category === 'car');
+
+    // スタッフリスト更新
+    S.staff = staff.map(s => s.name);
+    const staffList = document.getElementById('staffList');
+    if (staffList) {
+      staffList.innerHTML = staff.length
+        ? staff.map(s => `<span class="staff-tag">${s.name}<button onclick="removeMaster('${s.id}')">×</button></span>`).join('')
+        : '<span style="color:var(--sub);font-size:13px">スタッフがいません</span>';
+    }
+
+    // 顧客リスト更新
+    const custList2 = document.getElementById('customerList');
+    if (custList2) {
+      const allItems = [...customers, ...cars];
+      custList2.innerHTML = allItems.length
+        ? allItems.map(c => `<span class="staff-tag" style="font-size:12px">${c.category==='customer'?'👤':'🚗'} ${c.name}<button onclick="removeMaster('${c.id}')">×</button></span>`).join('')
+        : '<span style="color:var(--sub);font-size:13px">登録がありません</span>';
+    }
+
+    // datalist更新
+    const custNameList = document.getElementById('custNameList');
+    const carNameList = document.getElementById('carNameList');
+    if (custNameList) custNameList.innerHTML = customers.map(c => `<option value="${c.name}">`).join('');
+    if (carNameList) carNameList.innerHTML = cars.map(c => `<option value="${c.name}">`).join('');
+
+    // スタッフselectbox更新
+    renderStaff();
+  } catch(e) {
+    console.log('マスター読み込みエラー:', e);
+  }
+}
+
+function renderCustomers() {}
+function updateDatalist() {}
+function onCustSelected(custId, carId) {}
+
 // ========== STAFF ==========
 function renderStaff() {
   const list = document.getElementById('staffList');
@@ -1248,20 +1352,11 @@ function renderStaff() {
 }
 
 function addStaff() {
-  const inp = document.getElementById('newStaff');
-  const name = inp.value.trim();
-  if (!name || S.staff.includes(name)) return;
-  S.staff.push(name);
-  inp.value = '';
-  saveState();
-  renderStaff();
+  addStaffMaster();
 }
 
 function removeStaff(i) {
-  if (!confirm(`「${S.staff[i]}」を削除しますか？`)) return;
-  S.staff.splice(i,1);
-  saveState();
-  renderStaff();
+  // Supabase経由で削除（removeMasterを使用）
 }
 
 // ========== SETTINGS ==========
@@ -1944,8 +2039,9 @@ async function openShijishoView(order) {
         <div style="font-size:11px;color:var(--sub);font-weight:700">${typeLabel}</div>
         <div style="font-size:20px;font-weight:800;color:var(--accent)">${order.orderNum||'番号なし'}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span class="badge badge-${order.status}" style="font-size:13px;padding:5px 14px">${order.status}</span>
+        <button class="btn btn-ok btn-sm" onclick="openAddPhotoModal('${order.id}')">📷 写真追加</button>
         <button class="btn btn-gray btn-sm" onclick="openManageModal('${order.id}')">⚙️ 管理</button>
         <button class="btn btn-primary btn-sm" onclick="closeShijishoView()">✕ 閉じる</button>
       </div>
@@ -1967,10 +2063,91 @@ async function openShijishoView(order) {
       ${sakugyoHtml}
       ${photoHtml}
 
+      <!-- 写真追加エリア -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
+        <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📷 写真を追加</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-gray btn-sm" onclick="addPhotoToOrder('${order.id}','shijisho-photos','作業前')">＋ 作業前</button>
+          <button class="btn btn-gray btn-sm" onclick="addPhotoToOrder('${order.id}','shijisho-photos','作業中')">＋ 作業中</button>
+          <button class="btn btn-gray btn-sm" onclick="addPhotoToOrder('${order.id}','shijisho-photos','作業後')">＋ 作業後</button>
+          <button class="btn btn-gray btn-sm" onclick="addPhotoToOrder('${order.id}','shijisho-photos','納品書')">＋ 納品書</button>
+        </div>
+        <div id="shijisho-photos" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+      </div>
+
     </div>
   </div>`;
 
   document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function addPhotoToOrder(orderId, containerId, type) {
+  const fileId = 'view-photo-file-' + (++photoCounter);
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.multiple = true;
+  input.style.display = 'none';
+  input.id = fileId;
+  document.body.appendChild(input);
+  input.onchange = async () => {
+    const container = document.getElementById(containerId);
+    if (!input.files.length) return;
+
+    const rows = [];
+    let processed = 0;
+
+    Array.from(input.files).forEach(file => {
+      const slotId = 'view-slot-' + (++photoCounter);
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = async () => {
+          const canvas = document.createElement('canvas');
+          const maxW = 1200;
+          let w = img.width, h = img.height;
+          if (w > maxW) { h = h * maxW / w; w = maxW; }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', 0.7);
+
+          // プレビュー追加
+          const div = document.createElement('div');
+          div.id = slotId;
+          div.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px';
+          div.innerHTML = `
+            <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px">${type}</div>
+            <img src="${compressed}" style="width:100%;border-radius:6px" />
+            <div style="color:var(--sub);font-size:10px;margin-top:3px;text-align:center">保存中...</div>
+          `;
+          if (container) container.appendChild(div);
+
+          // Supabaseに直接保存
+          if (sb) {
+            try {
+              const { error } = await sb.from('sagyou_photos').insert([{
+                kiroku_id: orderId,
+                photo_type: type,
+                photo_b64: compressed,
+                memo: ''
+              }]);
+              if (!error) {
+                const statusEl = div.querySelector('div:last-child');
+                if (statusEl) statusEl.textContent = '右クリック→コピーでGATCHに貼付可';
+              }
+            } catch(e) {
+              console.log('写真保存エラー:', e);
+            }
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    input.remove();
+  };
+  input.click();
 }
 
 function shijishoField(label, value) {
@@ -2024,6 +2201,74 @@ function openManageModal(id) {
 function closeManageModal() {
   const el = document.getElementById('manageModal');
   if (el) el.remove();
+}
+
+// ========== 写真後追加モーダル ==========
+function openAddPhotoModal(orderId) {
+  const html = `
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;display:flex;align-items:flex-end;justify-content:center;padding:0" id="addPhotoModal">
+    <div style="background:var(--card);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:640px;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="color:var(--accent);font-size:16px;font-weight:800">📷 写真を追加</div>
+        <button onclick="closeAddPhotoModal()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div id="addPhotoSlots" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px"></div>
+      <button class="btn btn-gray" style="width:100%;margin-bottom:10px" onclick="addNewPhotoSlot('addPhotoSlots')">＋ 写真を選択（複数可）</button>
+      <button class="btn btn-primary" style="width:100%" onclick="saveAddedPhotos('${orderId}')">💾 写真を保存</button>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeAddPhotoModal() {
+  const el = document.getElementById('addPhotoModal');
+  if (el) el.remove();
+  window._pendingPhotos = {};
+}
+
+function addNewPhotoSlot(containerId) {
+  const fileId = 'add-photo-file-' + (++photoCounter);
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.multiple = true;
+  input.style.display = 'none';
+  input.id = fileId;
+  document.body.appendChild(input);
+  input.onchange = () => onPhotosSelected(fileId, containerId, '写真');
+  input.click();
+}
+
+async function saveAddedPhotos(orderId) {
+  const pending = window._pendingPhotos || {};
+  const keys = Object.keys(pending);
+  if (!keys.length) {
+    alert('写真を選択してください');
+    return;
+  }
+
+  const rows = keys.map(k => ({
+    kiroku_id: orderId,
+    photo_type: pending[k].type || '写真',
+    photo_b64: pending[k].dataUrl,
+    memo: ''
+  }));
+
+  try {
+    const { error } = await sb.from('sagyou_photos').insert(rows);
+    if (error) throw error;
+    alert('✅ 写真を保存しました！');
+    window._pendingPhotos = {};
+    closeAddPhotoModal();
+    // ビューを再読み込み
+    const order = S.orders.find(o => o.id === orderId);
+    if (order) {
+      closeShijishoView();
+      openShijishoView(order);
+    }
+  } catch(e) {
+    alert('写真の保存に失敗しました: ' + e.message);
+  }
 }
 
 function changeStatus(id, status) {
@@ -2137,12 +2382,15 @@ function closeFs() {
 // ========== INIT ==========
 function init() {
   loadState();
+  if (!S.customers) S.customers = [];
   initSupabase();
   renderAllChecklists();
   renderCarRepairItems();
   renderStaff();
   updateSyncUI();
   updateNumDisplay();
+  // Supabaseからマスターデータを読み込み
+  setTimeout(() => loadMasters(), 1000);
   const today = new Date().toISOString().split('T')[0];
   const rDate = document.getElementById('r-dateIn');
   const skDate = document.getElementById('sk-dateIn');
