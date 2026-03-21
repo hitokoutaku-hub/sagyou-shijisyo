@@ -1362,18 +1362,18 @@ function removeStaff(i) {
 }
 
 // ========== SETTINGS ==========
-function renderSettings() {
-  renderStaff();
-  const snames = {notice:'気がついた事', prevent:'予防整備', work:'作業内容'};
-const ic = document.getElementById('itemSettings');
-
-// 依頼事項（乗用車・トラック・エアコン）タブ
 const repairSections = [
   {key:'carRepairItems', label:'🚗 乗用車', def: DEF_CAR_REPAIR},
   {key:'truckRepairItems', label:'🚛 トラック', def: DEF_TRUCK_REPAIR},
   {key:'airconRepairItems', label:'❄️ エアコン', def: DEF_AIRCON_REPAIR},
 ];
 let activeRepairTab = 'carRepairItems';
+  function renderSettings() {
+  renderStaff();
+  const snames = {notice:'気がついた事', prevent:'予防整備', work:'作業内容'};
+const ic = document.getElementById('itemSettings');
+
+
 
 function renderRepairSettingTab() {
   const sec = repairSections.find(s => s.key === activeRepairTab);
