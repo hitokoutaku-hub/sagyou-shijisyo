@@ -1364,9 +1364,49 @@ function removeStaff(i) {
 // ========== SETTINGS ==========
 function renderSettings() {
   renderStaff();
-  const snames = {request:'依頼事項', notice:'気がついた事', prevent:'予防整備', work:'作業内容'};
-  const ic = document.getElementById('itemSettings');
-  ic.innerHTML = Object.keys(snames).map(sec => `
+  const snames = {notice:'気がついた事', prevent:'予防整備', work:'作業内容'};
+const ic = document.getElementById('itemSettings');
+
+// 依頼事項（乗用車・トラック・エアコン）タブ
+const repairSections = [
+  {key:'carRepairItems', label:'🚗 乗用車', def: DEF_CAR_REPAIR},
+  {key:'truckRepairItems', label:'🚛 トラック', def: DEF_TRUCK_REPAIR},
+  {key:'airconRepairItems', label:'❄️ エアコン', def: DEF_AIRCON_REPAIR},
+];
+let activeRepairTab = 'carRepairItems';
+
+function renderRepairSettingTab() {
+  const sec = repairSections.find(s => s.key === activeRepairTab);
+  document.getElementById('repairSettingContent').innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input id="ni-repair" placeholder="新しい項目を追加" style="flex:1;font-size:13px;padding:7px 10px"
+        onkeydown="if(event.key==='Enter')addRepairItem()" />
+      <button class="btn btn-primary btn-sm" onclick="addRepairItem()">追加</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">
+      ${(S[sec.key]||sec.def).map((item,i)=>`<span class="staff-tag" style="font-size:12px">${item}<button onclick="removeRepairItem(${i})">×</button></span>`).join('')}
+    </div>
+  `;
+}
+
+ic.innerHTML = `
+  <div style="margin-bottom:16px">
+    <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:8px">依頼事項</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
+      ${repairSections.map(s=>`<button class="btn btn-sm" id="rtab-${s.key}"
+        onclick="activeRepairTab='${s.key}';renderRepairSettingTab();repairSections.forEach(x=>document.getElementById('rtab-'+x.key).className='btn btn-sm '+(x.key==='${s.key}'?'btn-primary':'btn-gray'))"
+        style="">${s.label}</button>`).join('')}
+    </div>
+    <div id="repairSettingContent"></div>
+  </div>
+`;
+// タブ初期化
+repairSections.forEach(s => {
+  document.getElementById('rtab-'+s.key).className = 'btn btn-sm ' + (s.key===activeRepairTab?'btn-primary':'btn-gray');
+});
+renderRepairSettingTab();
+
+ic.innerHTML += Object.keys(snames).map(sec => `
     <div style="margin-bottom:16px">
       <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:6px">${snames[sec]}</div>
       <div style="display:flex;gap:6px;margin-bottom:6px">
@@ -1378,7 +1418,6 @@ function renderSettings() {
       </div>
     </div>
   `).join('');
-
   const sc = document.getElementById('shakkenItemSettings');
   sc.innerHTML = `
     <div style="display:flex;gap:6px;margin-bottom:12px">
@@ -1412,7 +1451,27 @@ function renderSettings() {
     `;
   }
 }
+function addRepairItem() {
+  const inp = document.getElementById('ni-repair');
+  const v = inp.value.trim();
+  if (!v) return;
+  const sec = repairSections.find(s => s.key === activeRepairTab);
+  S[activeRepairTab] = S[activeRepairTab] || [...sec.def];
+  S[activeRepairTab].push(v);
+  inp.value = '';
+  saveState();
+  renderRepairSettingTab();
+  renderCarRepairItems(); renderTruckItems(); renderAirconItems();
+}
 
+function removeRepairItem(i) {
+  const sec = repairSections.find(s => s.key === activeRepairTab);
+  S[activeRepairTab] = S[activeRepairTab] || [...sec.def];
+  S[activeRepairTab].splice(i,1);
+  saveState();
+  renderRepairSettingTab();
+  renderCarRepairItems(); renderTruckItems(); renderAirconItems();
+}
 function addItem(sec) {
   const inp = document.getElementById('ni-'+sec);
   const v = inp.value.trim();
