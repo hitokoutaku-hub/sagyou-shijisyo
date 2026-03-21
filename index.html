@@ -1394,7 +1394,7 @@ ic.innerHTML = `
     <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:8px">依頼事項</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
       ${repairSections.map(s=>`<button class="btn btn-sm" id="rtab-${s.key}"
-        onclick="activeRepairTab='${s.key}';renderRepairSettingTab();repairSections.forEach(x=>document.getElementById('rtab-'+x.key).className='btn btn-sm '+(x.key==='${s.key}'?'btn-primary':'btn-gray'))"
+        onclick="activeRepairTab='${s.key}';renderRepairSettingTab();document.querySelectorAll('[id^=rtab-]').forEach(b=>b.className='btn btn-sm btn-gray');document.getElementById('rtab-${s.key}').className='btn btn-sm btn-primary'"
         style="">${s.label}</button>`).join('')}
     </div>
     <div id="repairSettingContent"></div>
