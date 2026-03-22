@@ -168,9 +168,6 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
 .inp-wrap { position: relative; }
 .inp-wrap input { padding-right: 44px; }
 </style>
-
-
-
 </head>
 <body>
 <div id="app">
@@ -410,8 +407,6 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
     </div>
   </div>
 
-  <!-- 設定 -->
-
   <!-- 事故修理 -->
   <div class="panel" id="panel-accident">
     <div class="order-num-display">
@@ -593,16 +588,11 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
       <div class="modal-title" id="modalTitle" style="margin-bottom:0"></div>
       <button class="btn btn-gray btn-sm" onclick="closeModal('detailModal')">✕ 閉じる</button>
     </div>
-
-    <!-- GATCH転記ブロック -->
     <div style="background:#0a1a0a;border:2px solid var(--ok);border-radius:10px;padding:14px;margin-bottom:14px">
       <div style="color:var(--ok);font-size:12px;font-weight:700;margin-bottom:10px;letter-spacing:.05em">📋 GATCH転記用</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="gatchBlock"></div>
     </div>
-
-    <!-- 作業内容ブロック -->
     <div id="modalContent"></div>
-
     <div class="btn-row" style="margin-top:14px">
       <button class="btn btn-info btn-sm" onclick="openTransferModal()">📤 転送</button>
       <button class="btn btn-primary btn-sm" onclick="sendLine()">💬 LINE</button>
@@ -681,7 +671,6 @@ const DEF_AIRCON_REPAIR = [
   'エバポレータ交換','エキパン交換','エアコン内部洗浄（機械にて）'
 ];
 
-// ========== 乗用車車検 28項目 ==========
 const DEF_SK = [
   {label:'エンジンオイル', req:false, opts:'交換/補充/良好'},
   {label:'オイルフィルター', req:false, opts:'交換/良好'},
@@ -714,7 +703,6 @@ const DEF_SK = [
   {label:'下回り洗浄', req:false, opts:'実施/不要'},
 ];
 
-// ========== トラック車検：「要」→「交換」に変更、エンジンオイル交換は「交換/支給/不要」 ==========
 const DEF_SK_TRUCK = [
   {label:' ', req:false, opts:'整備KIT/シールKIT/分解無し'},
   {label:'ECUシステム診断', req:false, opts:'有/無し'},
@@ -802,8 +790,6 @@ function initSupabase() {
 async function sbSaveOrder(order) {
   if (!sb) return false;
   try {
-    // 写真はBase64のままlocalStorageに保存（Supabase Storageは後で対応）
-    const data = {...order};
     const { error } = await sb.from('sagyou_kiroku').upsert({
       id: order.id,
       order_num: order.orderNum,
@@ -912,7 +898,6 @@ function loadState() {
 }
 
 function saveState() {
-  // 設定・チェックリスト定義はlocalStorageに保存（ordersはSupabaseで管理）
   const toSave = {...S, orders: []};
   localStorage.setItem('ws2_state', JSON.stringify(toSave));
 }
@@ -991,7 +976,6 @@ function renderChecklist(section, id) {
 }
 
 function renderAllChecklists() {
-  renderChecklist('request','check-request');
   renderChecklist('notice','check-notice');
   renderPreventOkNg();
   renderChecklist('work','check-work');
@@ -1067,6 +1051,24 @@ function renderAirconItems() {
   });
 }
 
+function renderTruckItems() {
+  const c = document.getElementById('repair-truck-items');
+  if (!c) return;
+  c.innerHTML = '';
+  (S.truckRepairItems||[]).forEach(label => {
+    const checked = S.truckCheckState?.[label] || false;
+    const d = document.createElement('div');
+    d.className = 'check-item' + (checked?' checked':'');
+    d.innerHTML = `<span>${checked?'✅':'⬜'}</span><span>${label}</span>`;
+    d.onclick = () => {
+      S.truckCheckState = S.truckCheckState||{};
+      S.truckCheckState[label] = !S.truckCheckState[label];
+      renderTruckItems();
+    };
+    c.appendChild(d);
+  });
+}
+
 let skType = 'car';
 function switchSkType(type) {
   skType = type;
@@ -1089,10 +1091,7 @@ function renderSkTruckItems() {
     const btns = opts.map(o =>
       `<button class="sk-btn${st.work===o?' sel':''}" onclick="setSkTruckWork(${idx},'${o}')">${o}</button>`
     ).join('');
-    d.innerHTML = `
-      <span class="sk-item-label">${item.label}</span>
-      <div class="sk-btns">${btns}</div>
-    `;
+    d.innerHTML = `<span class="sk-item-label">${item.label}</span><div class="sk-btns">${btns}</div>`;
     c.appendChild(d);
   });
 }
@@ -1151,21 +1150,9 @@ function renderSkTruckLights() {
   const c = document.getElementById('sk-truck-lights');
   if (!c) return;
   S.skTruckLights = S.skTruckLights || {};
-
-  const headItems = [
-    'ヘッドライト球（HID）左',
-    'ヘッドライト球（HID）右',
-    'ヘッドライト球（ハロゲン）左',
-    'ヘッドライト球（ハロゲン）右',
-  ];
-  const countItems = [
-    'ポジション球','ウインカー球','車高灯','ナンバー灯球',
-    'マーカー球','マーカーASSY','メーターパネル球','フォグランプ球','スイッチ球'
-  ];
-
+  const headItems = ['ヘッドライト球（HID）左','ヘッドライト球（HID）右','ヘッドライト球（ハロゲン）左','ヘッドライト球（ハロゲン）右'];
+  const countItems = ['ポジション球','ウインカー球','車高灯','ナンバー灯球','マーカー球','マーカーASSY','メーターパネル球','フォグランプ球','スイッチ球'];
   let html = '';
-
-  // ヘッドライト：交換/不要
   headItems.forEach(label => {
     const val = S.skTruckLights[label] || '';
     html += `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
@@ -1176,20 +1163,15 @@ function renderSkTruckLights() {
       </div>
     </div>`;
   });
-
-  // その他：不要/1個〜5個
   countItems.forEach(label => {
     const val = S.skTruckLights[label] || '';
     const opts = ['不要','1個','2個','3個','4個','5個'];
-    const btns = opts.map(o =>
-      `<button class="sk-btn${val===o?' sel':''}" onclick="setSkTruckLight('${label}','${o}')">${o}</button>`
-    ).join('');
+    const btns = opts.map(o => `<button class="sk-btn${val===o?' sel':''}" onclick="setSkTruckLight('${label}','${o}')">${o}</button>`).join('');
     html += `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
       <span style="flex:1;min-width:100px;font-size:13px">${label}</span>
       <div style="display:flex;gap:4px;flex-wrap:wrap">${btns}</div>
     </div>`;
   });
-
   c.innerHTML = html;
 }
 
@@ -1197,24 +1179,6 @@ function setSkTruckLight(label, val) {
   S.skTruckLights = S.skTruckLights || {};
   S.skTruckLights[label] = S.skTruckLights[label] === val ? '' : val;
   renderSkTruckLights();
-}
-
-function renderTruckItems() {
-  const c = document.getElementById('repair-truck-items');
-  if (!c) return;
-  c.innerHTML = '';
-  (S.truckRepairItems||[]).forEach(label => {
-    const checked = S.truckCheckState?.[label] || false;
-    const d = document.createElement('div');
-    d.className = 'check-item' + (checked?' checked':'');
-    d.innerHTML = `<span>${checked?'✅':'⬜'}</span><span>${label}</span>`;
-    d.onclick = () => {
-      S.truckCheckState = S.truckCheckState||{};
-      S.truckCheckState[label] = !S.truckCheckState[label];
-      renderTruckItems();
-    };
-    c.appendChild(d);
-  });
 }
 
 // ========== SHAKKEN ITEMS ==========
@@ -1230,10 +1194,7 @@ function renderSkItems() {
     const btns = opts.map(o =>
       `<button class="sk-btn${st.work===o?' sel':''}" onclick="setSkWork(${idx},'${o}')">${o}</button>`
     ).join('');
-    d.innerHTML = `
-      <span class="sk-item-label">${item.label}</span>
-      <div class="sk-btns">${btns}</div>
-    `;
+    d.innerHTML = `<span class="sk-item-label">${item.label}</span><div class="sk-btns">${btns}</div>`;
     c.appendChild(d);
   });
 }
@@ -1245,17 +1206,15 @@ function setSkWork(idx, opt) {
   renderSkItems();
 }
 
-// ========== MASTERS (Supabase共有) ==========
+// ========== MASTERS ==========
 async function addCustomer() {
   const cust = document.getElementById('newCustName').value.trim();
   const car = document.getElementById('newCarName').value.trim();
   if (!cust && !car) return;
   if (!sb) { alert('Supabaseに接続されていません'); return; }
-
   const rows = [];
   if (cust) rows.push({ category: 'customer', name: cust });
   if (car) rows.push({ category: 'car', name: car });
-
   try {
     const { error } = await sb.from('sagyou_masters').insert(rows);
     if (error) throw error;
@@ -1296,12 +1255,9 @@ async function loadMasters() {
   try {
     const { data, error } = await sb.from('sagyou_masters').select('*').order('created_at');
     if (error) throw error;
-
     const staff = data.filter(d => d.category === 'staff');
     const customers = data.filter(d => d.category === 'customer');
     const cars = data.filter(d => d.category === 'car');
-
-    // スタッフリスト更新
     S.staff = staff.map(s => s.name);
     const staffList = document.getElementById('staffList');
     if (staffList) {
@@ -1309,8 +1265,6 @@ async function loadMasters() {
         ? staff.map(s => `<span class="staff-tag">${s.name}<button onclick="removeMaster('${s.id}')">×</button></span>`).join('')
         : '<span style="color:var(--sub);font-size:13px">スタッフがいません</span>';
     }
-
-    // 顧客リスト更新
     const custList2 = document.getElementById('customerList');
     if (custList2) {
       const allItems = [...customers, ...cars];
@@ -1318,14 +1272,10 @@ async function loadMasters() {
         ? allItems.map(c => `<span class="staff-tag" style="font-size:12px">${c.category==='customer'?'👤':'🚗'} ${c.name}<button onclick="removeMaster('${c.id}')">×</button></span>`).join('')
         : '<span style="color:var(--sub);font-size:13px">登録がありません</span>';
     }
-
-    // datalist更新
     const custNameList = document.getElementById('custNameList');
     const carNameList = document.getElementById('carNameList');
     if (custNameList) custNameList.innerHTML = customers.map(c => `<option value="${c.name}">`).join('');
     if (carNameList) carNameList.innerHTML = cars.map(c => `<option value="${c.name}">`).join('');
-
-    // スタッフselectbox更新
     renderStaff();
   } catch(e) {
     console.log('マスター読み込みエラー:', e);
@@ -1353,31 +1303,23 @@ function renderStaff() {
   });
 }
 
-function addStaff() {
-  addStaffMaster();
-}
-
-function removeStaff(i) {
-  // Supabase経由で削除（removeMasterを使用）
-}
+function addStaff() { addStaffMaster(); }
+function removeStaff(i) {}
 
 // ========== SETTINGS ==========
+// 設定画面の依頼事項タブ管理（グローバル）
 const repairSections = [
   {key:'carRepairItems', label:'🚗 乗用車', def: DEF_CAR_REPAIR},
   {key:'truckRepairItems', label:'🚛 トラック', def: DEF_TRUCK_REPAIR},
   {key:'airconRepairItems', label:'❄️ エアコン', def: DEF_AIRCON_REPAIR},
 ];
 let activeRepairTab = 'carRepairItems';
-  function renderSettings() {
-  renderStaff();
-  const snames = {notice:'気がついた事', prevent:'予防整備', work:'作業内容'};
-const ic = document.getElementById('itemSettings');
-
-
 
 function renderRepairSettingTab() {
   const sec = repairSections.find(s => s.key === activeRepairTab);
-  document.getElementById('repairSettingContent').innerHTML = `
+  const el = document.getElementById('repairSettingContent');
+  if (!el) return;
+  el.innerHTML = `
     <div style="display:flex;gap:6px;margin-bottom:6px">
       <input id="ni-repair" placeholder="新しい項目を追加" style="flex:1;font-size:13px;padding:7px 10px"
         onkeydown="if(event.key==='Enter')addRepairItem()" />
@@ -1387,70 +1329,18 @@ function renderRepairSettingTab() {
       ${(S[sec.key]||sec.def).map((item,i)=>`<span class="staff-tag" style="font-size:12px">${item}<button onclick="removeRepairItem(${i})">×</button></span>`).join('')}
     </div>
   `;
+  // タブのアクティブ状態を更新
+  repairSections.forEach(s => {
+    const btn = document.getElementById('rtab-'+s.key);
+    if (btn) btn.className = 'btn btn-sm ' + (s.key===activeRepairTab?'btn-primary':'btn-gray');
+  });
 }
 
-ic.innerHTML = `
-  <div style="margin-bottom:16px">
-    <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:8px">依頼事項</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
-      ${repairSections.map(s=>`<button class="btn btn-sm" id="rtab-${s.key}"
-        onclick="activeRepairTab='${s.key}';renderRepairSettingTab();document.querySelectorAll('[id^=rtab-]').forEach(b=>b.className='btn btn-sm btn-gray');document.getElementById('rtab-${s.key}').className='btn btn-sm btn-primary'"
-        style="">${s.label}</button>`).join('')}
-    </div>
-    <div id="repairSettingContent"></div>
-  </div>
-`;
-// タブ初期化
-repairSections.forEach(s => {
-  document.getElementById('rtab-'+s.key).className = 'btn btn-sm ' + (s.key===activeRepairTab?'btn-primary':'btn-gray');
-});
-renderRepairSettingTab();
-
-ic.innerHTML += Object.keys(snames).map(sec => `
-    <div style="margin-bottom:16px">
-      <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:6px">${snames[sec]}</div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input id="ni-${sec}" placeholder="新しい項目を追加" style="flex:1;font-size:13px;padding:7px 10px" onkeydown="if(event.key==='Enter')addItem('${sec}')" />
-        <button class="btn btn-primary btn-sm" onclick="addItem('${sec}')">追加</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${(S.items[sec]||[]).map((item,i)=>`<span class="staff-tag" style="font-size:12px">${item}<button onclick="removeItem('${sec}',${i})">×</button></span>`).join('')}
-      </div>
-    </div>
-  `).join('');
-  const sc = document.getElementById('shakkenItemSettings');
-  sc.innerHTML = `
-    <div style="display:flex;gap:6px;margin-bottom:12px">
-      <input id="newSkItem" placeholder="新しい車検項目" style="flex:1;font-size:13px;padding:7px 10px" />
-      <button class="btn btn-primary btn-sm" onclick="addSkItem()">追加</button>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:6px">
-      ${(S.skItems||[]).map((item,i)=>`
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
-          <span style="flex:1;font-size:14px">${item.label}</span>
-          <button onclick="toggleSkReq(${i})" style="padding:5px 12px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:${item.req?'#2e0d0d':'#1a2030'};color:${item.req?'#ff7070':'#7080a0'}">${item.req?'必須':'任意'}</button>
-          <button onclick="removeSkItem(${i})" style="background:none;border:none;color:var(--danger);font-size:18px;cursor:pointer;padding:0 4px">×</button>
-        </div>
-      `).join('')}
-    </div>
-  `;
-  document.getElementById('gasUrl').value = S.gasUrl||'';
-  updateSyncUI();
-
-  // 保険会社管理
-  const ic2 = document.getElementById('insuranceSettings');
-  if (ic2) {
-    ic2.innerHTML = `
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <input id="newInsurance" placeholder="保険会社名を入力" style="flex:1;font-size:13px;padding:7px 10px" onkeydown="if(event.key==='Enter')addInsurance()" />
-        <button class="btn btn-primary btn-sm" onclick="addInsurance()">追加</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${(S.insuranceCompanies||[]).map((name,i)=>`<span class="staff-tag" style="font-size:12px">${name}<button onclick="removeInsurance(${i})">×</button></span>`).join('')}
-      </div>
-    `;
-  }
+function switchRepairSettingTab(key) {
+  activeRepairTab = key;
+  renderRepairSettingTab();
 }
+
 function addRepairItem() {
   const inp = document.getElementById('ni-repair');
   const v = inp.value.trim();
@@ -1472,6 +1362,70 @@ function removeRepairItem(i) {
   renderRepairSettingTab();
   renderCarRepairItems(); renderTruckItems(); renderAirconItems();
 }
+
+function renderSettings() {
+  renderStaff();
+  const snames = {notice:'気がついた事', prevent:'予防整備', work:'作業内容'};
+  const ic = document.getElementById('itemSettings');
+
+  ic.innerHTML = `
+    <div style="margin-bottom:16px">
+      <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:8px">依頼事項</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
+        ${repairSections.map(s=>`<button class="btn btn-sm" id="rtab-${s.key}" onclick="switchRepairSettingTab('${s.key}')">${s.label}</button>`).join('')}
+      </div>
+      <div id="repairSettingContent"></div>
+    </div>
+  `;
+
+  ic.innerHTML += Object.keys(snames).map(sec => `
+    <div style="margin-bottom:16px">
+      <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:6px">${snames[sec]}</div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input id="ni-${sec}" placeholder="新しい項目を追加" style="flex:1;font-size:13px;padding:7px 10px" onkeydown="if(event.key==='Enter')addItem('${sec}')" />
+        <button class="btn btn-primary btn-sm" onclick="addItem('${sec}')">追加</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${(S.items[sec]||[]).map((item,i)=>`<span class="staff-tag" style="font-size:12px">${item}<button onclick="removeItem('${sec}',${i})">×</button></span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  renderRepairSettingTab();
+
+  const sc = document.getElementById('shakkenItemSettings');
+  sc.innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <input id="newSkItem" placeholder="新しい車検項目" style="flex:1;font-size:13px;padding:7px 10px" />
+      <button class="btn btn-primary btn-sm" onclick="addSkItem()">追加</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${(S.skItems||[]).map((item,i)=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+          <span style="flex:1;font-size:14px">${item.label}</span>
+          <button onclick="toggleSkReq(${i})" style="padding:5px 12px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:${item.req?'#2e0d0d':'#1a2030'};color:${item.req?'#ff7070':'#7080a0'}">${item.req?'必須':'任意'}</button>
+          <button onclick="removeSkItem(${i})" style="background:none;border:none;color:var(--danger);font-size:18px;cursor:pointer;padding:0 4px">×</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  document.getElementById('gasUrl').value = S.gasUrl||'';
+  updateSyncUI();
+
+  const ic2 = document.getElementById('insuranceSettings');
+  if (ic2) {
+    ic2.innerHTML = `
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="newInsurance" placeholder="保険会社名を入力" style="flex:1;font-size:13px;padding:7px 10px" onkeydown="if(event.key==='Enter')addInsurance()" />
+        <button class="btn btn-primary btn-sm" onclick="addInsurance()">追加</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${(S.insuranceCompanies||[]).map((name,i)=>`<span class="staff-tag" style="font-size:12px">${name}<button onclick="removeInsurance(${i})">×</button></span>`).join('')}
+      </div>
+    `;
+  }
+}
+
 function addItem(sec) {
   const inp = document.getElementById('ni-'+sec);
   const v = inp.value.trim();
@@ -1554,7 +1508,7 @@ async function testGas() {
   showGasMsg('接続テスト中...', 'wait');
   try {
     await fetch(S.gasUrl + '?action=list', { method: 'GET', mode: 'no-cors' });
-    showGasMsg('✅ 接続成功！（GASサーバーに到達しました）', 'ok');
+    showGasMsg('✅ 接続成功！', 'ok');
   } catch(e) {
     showGasMsg('❌ 接続失敗: ' + e.message, 'err');
   }
@@ -1573,7 +1527,6 @@ async function gasPost(data) {
         else if (typeof v === 'object' && v !== null) params.append(k, JSON.stringify(v));
         else params.append(k, v || '');
       });
-      // JSONP方式でCORSを完全回避
       const cbName = 'gasCallback_' + Date.now();
       window[cbName] = function(res) {
         delete window[cbName];
@@ -1587,13 +1540,11 @@ async function gasPost(data) {
       document.head.appendChild(script);
       setTimeout(() => { resolve(true); }, 5000);
     } catch(e) {
-      console.log('GAS送信エラー:', e);
       resolve(true);
     }
   });
 }
 
-// ========== PHOTO PREVIEW ==========
 // ========== PHOTO ==========
 let photoCounter = 0;
 
@@ -1624,7 +1575,6 @@ function onPhotosSelected(fileId, containerId, type) {
   const input = document.getElementById(fileId);
   const container = document.getElementById(containerId);
   if (!input || !input.files.length) return;
-
   Array.from(input.files).forEach(file => {
     const slotId = 'photo-slot-' + (++photoCounter);
     const reader = new FileReader();
@@ -1638,7 +1588,6 @@ function onPhotosSelected(fileId, containerId, type) {
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
         const compressed = canvas.toDataURL('image/jpeg', 0.7);
-
         const div = document.createElement('div');
         div.id = slotId;
         div.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px';
@@ -1650,7 +1599,6 @@ function onPhotosSelected(fileId, containerId, type) {
           <img src="${compressed}" style="width:100%;border-radius:6px" />
         `;
         container.appendChild(div);
-
         window._pendingPhotos = window._pendingPhotos || {};
         window._pendingPhotos[slotId] = { type, dataUrl: compressed };
       };
@@ -1658,7 +1606,6 @@ function onPhotosSelected(fileId, containerId, type) {
     };
     reader.readAsDataURL(file);
   });
-
   input.remove();
 }
 
@@ -1666,14 +1613,12 @@ async function uploadPendingPhotos(orderId) {
   const pending = window._pendingPhotos || {};
   const keys = Object.keys(pending);
   if (!keys.length || !sb) return;
-
   const rows = keys.map(k => ({
     kiroku_id: orderId,
     photo_type: pending[k].type,
     photo_b64: pending[k].dataUrl,
     memo: ''
   }));
-
   try {
     const { error } = await sb.from('sagyou_photos').insert(rows);
     if (error) throw error;
@@ -1694,13 +1639,11 @@ async function loadPhotosForOrder(orderId) {
     if (error) throw error;
     return data || [];
   } catch(e) {
-    console.log('写真読み込みエラー:', e);
     return [];
   }
 }
 
 function previewPhoto(inputId, previewId) {
-  // 後方互換性のため残す（車検・事故修理用）
   const file = document.getElementById(inputId).files[0];
   const preview = document.getElementById(previewId);
   if (!file) return;
@@ -1781,11 +1724,9 @@ function clearRepair() {
   S.carRepairCheckState = {};
   S.truckCheckState = {};
   S.airconCheckState = {};
-  // 写真スロットをクリア
   const photoContainer = document.getElementById('r-photos');
   if (photoContainer) photoContainer.innerHTML = '';
   window._pendingPhotos = {};
-  // 依頼事項タブを乗用車に戻す
   switchRepairType('car');
   renderAllChecklists();
   renderCarRepairItems();
@@ -1793,7 +1734,6 @@ function clearRepair() {
   renderAirconItems();
   updateNumDisplay();
 }
-
 
 // ========== 保険会社管理 ==========
 function addInsurance() {
@@ -1853,21 +1793,8 @@ async function saveAccident() {
     savedAt: new Date().toLocaleString('ja-JP'),
   };
 
-  // 写真をローカルに保存（Base64）＋GASにも送信
-  const pendingAc = window._pendingPhotos || {};
-  if (pendingAc['ac-photo-receipt']) {
-    order.photoReceipt = 'data:image/jpeg;base64,' + pendingAc['ac-photo-receipt'].base64;
-    uploadPhotoToGas(pendingAc['ac-photo-receipt'].base64, pendingAc['ac-photo-receipt'].fileName, order.id);
-  }
-  if (pendingAc['ac-photo-repair']) {
-    order.photoRepair = 'data:image/jpeg;base64,' + pendingAc['ac-photo-repair'].base64;
-    uploadPhotoToGas(pendingAc['ac-photo-repair'].base64, pendingAc['ac-photo-repair'].fileName, order.id);
-  }
-  window._pendingPhotos = {};
-
   S.orders.unshift(order);
   saveState();
-  if (S.gasUrl) await gasPost({action:'save', order});
   alert(`✅ 事故修理指示書を保存しました\n指示書番号: ${orderNum}`);
   clearAccident();
 }
@@ -1919,18 +1846,6 @@ async function saveShakken() {
     savedAt: new Date().toLocaleString('ja-JP'),
   };
 
-  // 写真をローカルに保存（Base64）＋GASにも送信
-  const pendingSk = window._pendingPhotos || {};
-  if (pendingSk['sk-photo-receipt']) {
-    order.photoReceipt = 'data:image/jpeg;base64,' + pendingSk['sk-photo-receipt'].base64;
-    uploadPhotoToGas(pendingSk['sk-photo-receipt'].base64, pendingSk['sk-photo-receipt'].fileName, order.id);
-  }
-  if (pendingSk['sk-photo-repair']) {
-    order.photoRepair = 'data:image/jpeg;base64,' + pendingSk['sk-photo-repair'].base64;
-    uploadPhotoToGas(pendingSk['sk-photo-repair'].base64, pendingSk['sk-photo-repair'].fileName, order.id);
-  }
-  window._pendingPhotos = {};
-
   S.orders.unshift(order);
   saveState();
   const ok = await sbSaveOrder(order);
@@ -1967,22 +1882,17 @@ function updateMonthFilter() {
   const sel = document.getElementById('filterMonth');
   if (!sel) return;
   const current = sel.value;
-
-  // 全データから月一覧を生成
   const months = new Set();
   S.orders.forEach(o => {
     const d = o.dateIn || '';
     if (d && d.length >= 7) months.add(d.substring(0, 7));
   });
-
   const sorted = Array.from(months).sort().reverse();
   sel.innerHTML = '<option value="">全月</option>' +
     sorted.map(m => {
       const [y, mo] = m.split('-');
       return `<option value="${m}" ${m === current ? 'selected' : ''}>${y}年${parseInt(mo)}月</option>`;
     }).join('');
-
-  // デフォルトで今月を選択（初回のみ）
   if (!current && sorted.length > 0) {
     const today = new Date().toISOString().substring(0, 7);
     if (sorted.includes(today)) sel.value = today;
@@ -1990,7 +1900,6 @@ function updateMonthFilter() {
 }
 
 function clearFilter() {
-  document.getElementById('filterDate').value = '';
   document.getElementById('filterStatus').value = '';
   document.getElementById('filterKeyword').value = '';
   document.getElementById('filterType').value = '';
@@ -2000,23 +1909,15 @@ function clearFilter() {
 async function loadList() {
   const c = document.getElementById('orderList');
   c.innerHTML = '<div class="loading">読み込み中...</div>';
-
-  // Supabaseからデータ取得
   if (sbReady) {
     const sbOrders = await sbLoadOrders();
-    if (sbOrders !== null) {
-      S.orders = sbOrders;
-    }
+    if (sbOrders !== null) S.orders = sbOrders;
   }
-
   const filterMonth = document.getElementById('filterMonth')?.value;
   const filterStatus = document.getElementById('filterStatus')?.value;
   const filterKeyword = document.getElementById('filterKeyword')?.value.trim();
   const filterType = document.getElementById('filterType')?.value;
-
-  // 月選択リストを更新
   updateMonthFilter();
-
   let orders = [...S.orders];
   if (filterMonth) orders = orders.filter(o => {
     const d = o.dateIn || o.savedAt || '';
@@ -2032,15 +1933,12 @@ async function loadList() {
       (o.orderNum||'').includes(filterKeyword)
     );
   }
-
   const el = document.getElementById('listSyncLabel');
   if (el) el.textContent = sbReady ? 'クラウド同期済み' : 'ローカル保存';
-
   if (!orders.length) {
     c.innerHTML = '<div class="empty">📋 指示書がありません</div>';
     return;
   }
-
   c.innerHTML = orders.map(o => `
     <div class="order-item" onclick="showDetail('${o.id}')">
       <div class="top">
@@ -2065,8 +1963,6 @@ function showDetail(id) {
 
 async function openShijishoView(order) {
   const typeLabel = order.type==='shakken'?'車検指示書':order.type==='accident'?'事故修理指示書':'作業指示書';
-
-  // 作業内容セクション
   let sakugyoHtml = '';
   if (order.type === 'accident') {
     if (order.insurance) sakugyoHtml += shijishoSection('🏢 保険会社', `<span style="font-size:16px;font-weight:700">${order.insurance}</span>`);
@@ -2080,11 +1976,7 @@ async function openShijishoView(order) {
       sakugyoHtml += shijishoSection('🔍 車検点検結果', items);
     }
   } else {
-    const allItems = [
-      ...(order.carItems||[]),
-      ...(order.truckItems||[]),
-      ...(order.airconItems||[])
-    ];
+    const allItems = [...(order.carItems||[]),...(order.truckItems||[]),...(order.airconItems||[])];
     if (allItems.length) sakugyoHtml += shijishoSection('✅ 依頼事項', tagList(allItems, 'var(--accent)'));
     if (order.noticeItems?.length) sakugyoHtml += shijishoSection('👁️ 気がついた事', tagList(order.noticeItems, 'var(--info)'));
     if (order.preventResults && Object.keys(order.preventResults).length) {
@@ -2098,7 +1990,6 @@ async function openShijishoView(order) {
   }
   if (order.remarks) sakugyoHtml += shijishoSection('📝 備考・メモ', `<div style="white-space:pre-wrap;font-size:15px;line-height:1.8;background:var(--bg);padding:12px;border-radius:8px">${order.remarks}</div>`);
 
-  // 写真セクション（Supabaseから読み込み）
   let photoHtml = '';
   const photos = await loadPhotosForOrder(order.id);
   if (photos.length) {
@@ -2108,18 +1999,10 @@ async function openShijishoView(order) {
       if (!grouped[p.photo_type]) grouped[p.photo_type] = [];
       grouped[p.photo_type].push(p);
     });
-    let imgs = '';
-    // 全写真をフラットなリストに
     const allPhotos = [];
-    typeOrder.forEach(type => {
-      if (grouped[type]) grouped[type].forEach(p => allPhotos.push(p));
-    });
-    // 残りのタイプ
-    Object.keys(grouped).forEach(type => {
-      if (!typeOrder.includes(type)) grouped[type].forEach(p => allPhotos.push(p));
-    });
-
-    imgs = allPhotos.map((p, i) => `
+    typeOrder.forEach(type => { if (grouped[type]) grouped[type].forEach(p => allPhotos.push(p)); });
+    Object.keys(grouped).forEach(type => { if (!typeOrder.includes(type)) grouped[type].forEach(p => allPhotos.push(p)); });
+    const imgs = allPhotos.map((p, i) => `
       <div style="position:relative">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
           <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}"
@@ -2128,7 +2011,6 @@ async function openShijishoView(order) {
         </div>
         <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" />
       </div>`).join('');
-
     photoHtml = shijishoSection('📷 写真', `
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(true)">✅ 全選択</button>
@@ -2141,7 +2023,6 @@ async function openShijishoView(order) {
 
   const html = `
   <div style="position:fixed;inset:0;background:var(--bg);z-index:500;overflow-y:auto" id="shijishoView">
-    <!-- ヘッダー -->
     <div style="position:sticky;top:0;background:var(--card);border-bottom:2px solid var(--accent);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;z-index:10">
       <div>
         <div style="font-size:11px;color:var(--sub);font-weight:700">${typeLabel}</div>
@@ -2155,10 +2036,7 @@ async function openShijishoView(order) {
         <button class="btn btn-primary btn-sm" onclick="closeShijishoView()">✕ 閉じる</button>
       </div>
     </div>
-
     <div style="max-width:900px;margin:0 auto;padding:16px">
-
-      <!-- 基本情報 -->
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
         ${shijishoField('👤 顧客名', order.custName)}
         ${shijishoField('🚗 車名', order.carName)}
@@ -2168,11 +2046,8 @@ async function openShijishoView(order) {
         ${shijishoField('🔧 担当整備士', order.mechName)}
         ${shijishoField('📋 受付担当', order.receptionName)}
       </div>
-
       ${sakugyoHtml}
       ${photoHtml}
-
-      <!-- 写真追加エリア -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
         <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📷 写真を追加</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
@@ -2183,10 +2058,8 @@ async function openShijishoView(order) {
         </div>
         <div id="shijisho-photos" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
       </div>
-
     </div>
   </div>`;
-
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
@@ -2202,10 +2075,6 @@ function addPhotoToOrder(orderId, containerId, type) {
   input.onchange = async () => {
     const container = document.getElementById(containerId);
     if (!input.files.length) return;
-
-    const rows = [];
-    let processed = 0;
-
     Array.from(input.files).forEach(file => {
       const slotId = 'view-slot-' + (++photoCounter);
       const reader = new FileReader();
@@ -2219,8 +2088,6 @@ function addPhotoToOrder(orderId, containerId, type) {
           canvas.width = w; canvas.height = h;
           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
           const compressed = canvas.toDataURL('image/jpeg', 0.7);
-
-          // プレビュー追加
           const div = document.createElement('div');
           div.id = slotId;
           div.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px';
@@ -2230,30 +2097,22 @@ function addPhotoToOrder(orderId, containerId, type) {
             <div style="color:var(--sub);font-size:10px;margin-top:3px;text-align:center">保存中...</div>
           `;
           if (container) container.appendChild(div);
-
-          // Supabaseに直接保存
           if (sb) {
             try {
               const { error } = await sb.from('sagyou_photos').insert([{
-                kiroku_id: orderId,
-                photo_type: type,
-                photo_b64: compressed,
-                memo: ''
+                kiroku_id: orderId, photo_type: type, photo_b64: compressed, memo: ''
               }]);
               if (!error) {
                 const statusEl = div.querySelector('div:last-child');
-                if (statusEl) statusEl.textContent = '右クリック→コピーでGATCHに貼付可';
+                if (statusEl) statusEl.textContent = '保存完了';
               }
-            } catch(e) {
-              console.log('写真保存エラー:', e);
-            }
+            } catch(e) { console.log('写真保存エラー:', e); }
           }
         };
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     });
-
     input.remove();
   };
   input.click();
@@ -2281,28 +2140,17 @@ function tagList(items, color) {
 function sendLineReport(orderId) {
   const order = S.orders.find(o => o.id === orderId);
   if (!order) return;
-
-  // 選択した写真を確認
   const checked = document.querySelectorAll('[id^="photo-check-"]:checked');
-
- let text = '【整備作業報告】\n';
-    text += '——————\n';
-    if (order.custName) text += '顧客名: ' + order.custName + '\n';
-    if (order.carName) text += '車名: ' + order.carName + '\n';
-    if (order.carPlate) text += 'ナンバー: ' + order.carPlate + '\n';
-    if (order.remarks) text += '——————\n備考:\n' + order.remarks + '\n';
-    text += '——————';
-  text += '────────────';
-
-  // テキストをLINEで送る
+  let text = '【整備作業報告】\n——————\n';
+  if (order.custName) text += '顧客名: ' + order.custName + '\n';
+  if (order.carName) text += '車名: ' + order.carName + '\n';
+  if (order.carPlate) text += 'ナンバー: ' + order.carPlate + '\n';
+  if (order.remarks) text += '——————\n備考:\n' + order.remarks + '\n';
+  text += '——————';
   window.open('https://line.me/R/share?text=' + encodeURIComponent(text), '_blank');
-
-  // 写真がチェックされていればダウンロード
   if (checked.length > 0) {
     setTimeout(() => {
-     if (confirm('選択した写真(' + checked.length + '枚)をダウンロードしますか？LINEに添付してください。')) {
-        downloadSelectedPhotos();
-      }
+      if (confirm('選択した写真(' + checked.length + '枚)をダウンロードしますか？')) downloadSelectedPhotos();
     }, 500);
   }
 }
@@ -2313,10 +2161,7 @@ function selectAllPhotos(checked) {
 
 function downloadSelectedPhotos() {
   const checked = document.querySelectorAll('[id^="photo-check-"]:checked');
-  if (!checked.length) {
-    alert('写真を選択してください');
-    return;
-  }
+  if (!checked.length) { alert('写真を選択してください'); return; }
   checked.forEach((cb, i) => {
     const b64 = cb.dataset.b64;
     const type = cb.dataset.type || '写真';
@@ -2332,11 +2177,9 @@ function closeShijishoView() {
   if (el) el.remove();
 }
 
-// 管理モーダル（ステータス変更・編集・削除）
 function openManageModal(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
-
   const html = `
   <div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px" id="manageModal">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:400px">
@@ -2364,60 +2207,43 @@ function closeManageModal() {
   if (el) el.remove();
 }
 
-// 編集モーダル
 function openEditModal(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
-
   const html = `
   <div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;overflow-y:auto;padding:20px" id="editModal">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:640px;margin:auto">
       <div style="color:var(--accent);font-size:16px;font-weight:800;margin-bottom:16px">✏️ 編集 - ${order.orderNum||''}</div>
-
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div>
-          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">顧客名</label>
-          <input id="edit-custName" value="${order.custName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
-        </div>
-        <div>
-          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">車名</label>
-          <input id="edit-carName" value="${order.carName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
-        </div>
-        <div>
-          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">ナンバー</label>
-          <input id="edit-carPlate" value="${order.carPlate||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
-        </div>
-        <div>
-          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">出庫予定日</label>
-          <input type="date" id="edit-dateOut" value="${order.dateOut||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
-        </div>
-        <div>
-          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">担当整備士</label>
-          <input id="edit-mechName" value="${order.mechName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
-        </div>
-        <div>
-          <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">受付担当</label>
-          <input id="edit-receptionName" value="${order.receptionName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" />
-        </div>
+        <div><label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">顧客名</label>
+          <input id="edit-custName" value="${order.custName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">車名</label>
+          <input id="edit-carName" value="${order.carName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">ナンバー</label>
+          <input id="edit-carPlate" value="${order.carPlate||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">出庫予定日</label>
+          <input type="date" id="edit-dateOut" value="${order.dateOut||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">担当整備士</label>
+          <input id="edit-mechName" value="${order.mechName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">受付担当</label>
+          <input id="edit-receptionName" value="${order.receptionName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
       </div>
-
       <div style="margin-bottom:10px">
         <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">備考・メモ</label>
         <textarea id="edit-remarks" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;min-height:120px;resize:vertical;font-family:inherit">${order.remarks||''}</textarea>
       </div>
-
-<div style="margin-bottom:10px">
-            <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">✅ 依頼事項（乗用車）</label>
-            <textarea id="edit-carItems" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;min-height:80px">${(order.carItems||[]).join('\n')}</textarea>
-          </div>
-          <div style="margin-bottom:10px">
-            <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">👁 気が付いたこと</label>
-            <textarea id="edit-noticeItems" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;min-height:80px">${(order.noticeItems||[]).join('\n')}</textarea>
-          </div>
-          <div style="margin-bottom:10px">
-            <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">🔧 作業内容</label>
-            <textarea id="edit-workItems" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;min-height:80px">${(order.workItems||[]).join('\n')}</textarea>
-          </div>
+      <div style="margin-bottom:10px">
+        <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">✅ 依頼事項（乗用車）</label>
+        <textarea id="edit-carItems" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;min-height:80px">${(order.carItems||[]).join('\n')}</textarea>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">👁 気が付いたこと</label>
+        <textarea id="edit-noticeItems" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;min-height:80px">${(order.noticeItems||[]).join('\n')}</textarea>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="color:var(--sub);font-size:11px;font-weight:700;display:block;margin-bottom:4px">🔧 作業内容</label>
+        <textarea id="edit-workItems" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;min-height:80px">${(order.workItems||[]).join('\n')}</textarea>
+      </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" style="flex:2" onclick="saveEdit('${id}')">💾 保存する</button>
         <button class="btn btn-gray" style="flex:1" onclick="closeEditModal()">キャンセル</button>
@@ -2430,7 +2256,6 @@ function openEditModal(id) {
 async function saveEdit(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
-
   order.custName = document.getElementById('edit-custName').value.trim();
   order.carName = document.getElementById('edit-carName').value.trim();
   order.carPlate = document.getElementById('edit-carPlate').value.trim();
@@ -2438,16 +2263,14 @@ async function saveEdit(id) {
   order.mechName = document.getElementById('edit-mechName').value.trim();
   order.receptionName = document.getElementById('edit-receptionName').value.trim();
   order.remarks = document.getElementById('edit-remarks').value;
-
- order.carItems = document.getElementById('edit-carItems').value.trim().split('\n').filter(x=>x);
-    order.noticeItems = document.getElementById('edit-noticeItems').value.trim().split('\n').filter(x=>x);
-    order.workItems = document.getElementById('edit-workItems').value.trim().split('\n').filter(x=>x);
+  order.carItems = document.getElementById('edit-carItems').value.trim().split('\n').filter(x=>x);
+  order.noticeItems = document.getElementById('edit-noticeItems').value.trim().split('\n').filter(x=>x);
+  order.workItems = document.getElementById('edit-workItems').value.trim().split('\n').filter(x=>x);
   saveState();
   const ok = await sbSaveOrder(order);
   if (ok) {
     alert('✅ 更新しました！');
     closeEditModal();
-    // ビューを再読み込み
     closeShijishoView();
     openShijishoView(order);
   } else {
@@ -2460,7 +2283,6 @@ function closeEditModal() {
   if (el) el.remove();
 }
 
-// ========== 写真後追加モーダル ==========
 function openAddPhotoModal(orderId) {
   const html = `
   <div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;display:flex;align-items:flex-end;justify-content:center;padding:0" id="addPhotoModal">
@@ -2499,30 +2321,21 @@ function addNewPhotoSlot(containerId) {
 async function saveAddedPhotos(orderId) {
   const pending = window._pendingPhotos || {};
   const keys = Object.keys(pending);
-  if (!keys.length) {
-    alert('写真を選択してください');
-    return;
-  }
-
+  if (!keys.length) { alert('写真を選択してください'); return; }
   const rows = keys.map(k => ({
     kiroku_id: orderId,
     photo_type: pending[k].type || '写真',
     photo_b64: pending[k].dataUrl,
     memo: ''
   }));
-
   try {
     const { error } = await sb.from('sagyou_photos').insert(rows);
     if (error) throw error;
     alert('✅ 写真を保存しました！');
     window._pendingPhotos = {};
     closeAddPhotoModal();
-    // ビューを再読み込み
     const order = S.orders.find(o => o.id === orderId);
-    if (order) {
-      closeShijishoView();
-      openShijishoView(order);
-    }
+    if (order) { closeShijishoView(); openShijishoView(order); }
   } catch(e) {
     alert('写真の保存に失敗しました: ' + e.message);
   }
@@ -2547,16 +2360,13 @@ function deleteOrder(id) {
   loadList();
 }
 
-// ========== TRANSFER ==========
 function openTransferModal() {
   const list = document.getElementById('transferStaffList');
   if (!S.staff.length) {
     list.innerHTML = '<p style="color:var(--sub);font-size:13px">スタッフが登録されていません</p>';
   } else {
     list.innerHTML = S.staff.map(name => `
-      <button class="staff-select-btn" onclick="transferToStaff('${name}')">
-        👤 ${name}
-      </button>
+      <button class="staff-select-btn" onclick="transferToStaff('${name}')">👤 ${name}</button>
     `).join('');
   }
   document.getElementById('transferModal').classList.add('open');
@@ -2566,39 +2376,22 @@ function transferToStaff(name) {
   const order = currentOrder;
   if (!order) return;
   closeModal('transferModal');
-
-  let text = `【作業指示書 転送】\n`;
-  text += `担当: ${name} さん\n`;
-  text += `────────────\n`;
+  let text = `【作業指示書 転送】\n担当: ${name} さん\n────────────\n`;
   text += `指示書番号: ${order.orderNum||''}\n`;
-  text += `顧客: ${order.custName||''}　TEL: ${order.custPhone||''}\n`;
-  text += `車両: ${order.carName||''} ${order.carPlate||''}\n`;
+  text += `顧客: ${order.custName||''}\n車両: ${order.carName||''} ${order.carPlate||''}\n`;
   text += `入庫: ${order.dateIn||''}　出庫予定: ${order.dateOut||''}\n`;
-  if (order.requestItems?.length) text += `依頼: ${order.requestItems.join('、')}\n`;
-  if (order.workItems?.length) text += `作業: ${order.workItems.join('、')}\n`;
   if (order.remarks) text += `備考: ${order.remarks}\n`;
-  text += `────────────\n`;
-  text += `ステータス: ${order.status}`;
-
+  text += `────────────\nステータス: ${order.status}`;
   window.open('https://line.me/R/share?text=' + encodeURIComponent(text), '_blank');
 }
 
-// ========== LINE ==========
 function sendLine() {
   const order = currentOrder;
   if (!order) return;
   let text = `【${order.type==='shakken'?'車検':'作業'}指示書】${order.orderNum||''}\n`;
-  text += `顧客: ${order.custName||''}　TEL: ${order.custPhone||''}\n`;
-  text += `車両: ${order.carName||''} ${order.carPlate||''}\n`;
+  text += `顧客: ${order.custName||''}\n車両: ${order.carName||''} ${order.carPlate||''}\n`;
   text += `入庫: ${order.dateIn||''}　出庫予定: ${order.dateOut||''}\n`;
   text += `担当: ${order.mechName||''}　受付: ${order.receptionName||''}\n`;
-  if (order.type==='shakken') {
-    const res = Object.entries(order.skResults||{}).filter(([,v])=>v);
-    if (res.length) { text += `\n【車検結果】\n`; res.forEach(([k,v]) => text += `${k}: ${v}\n`); }
-  } else {
-    if (order.requestItems?.length) text += `\n【依頼】${order.requestItems.join('、')}\n`;
-    if (order.workItems?.length) text += `【作業】${order.workItems.join('、')}\n`;
-  }
   if (order.remarks) text += `\n【備考】${order.remarks}`;
   window.open('https://line.me/R/share?text=' + encodeURIComponent(text), '_blank');
 }
@@ -2607,7 +2400,6 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('open');
 }
 
-// ========== FULLSCREEN INPUT ==========
 let fsTargetId = null;
 let fsIsTextarea = false;
 
@@ -2646,7 +2438,6 @@ function init() {
   renderStaff();
   updateSyncUI();
   updateNumDisplay();
-  // Supabaseからマスターデータを読み込み
   setTimeout(() => loadMasters(), 1000);
   const today = new Date().toISOString().split('T')[0];
   const rDate = document.getElementById('r-dateIn');
@@ -2659,8 +2450,5 @@ function init() {
 
 init();
 </script>
-
-<!-- Firebase削除済み：GAS+Googleドライブで写真管理 -->
-
 </body>
 </html>
