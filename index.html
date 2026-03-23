@@ -2003,11 +2003,12 @@ async function openShijishoView(order) {
     typeOrder.forEach(type => { if (grouped[type]) grouped[type].forEach(p => allPhotos.push(p)); });
     Object.keys(grouped).forEach(type => { if (!typeOrder.includes(type)) grouped[type].forEach(p => allPhotos.push(p)); });
     const imgs = allPhotos.map((p, i) => `
-      <div style="position:relative">
+      <div id="photo-slot-view-${i}" style="position:relative">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}"
+          <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}" data-id="${p.id||''}"
             style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)" />
           <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
+          <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️ 削除</button>
         </div>
         <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" />
       </div>`).join('');
@@ -2155,8 +2156,22 @@ function sendLineReport(orderId) {
   }
 }
 
-function selectAllPhotos(checked) {
-  document.querySelectorAll('[id^="photo-check-"]').forEach(cb => cb.checked = checked);
+function selectAllPhotos(val) {
+  document.querySelectorAll('[id^="photo-check-"]').forEach(cb => { cb.checked = val; });
+}
+
+async function deletePhoto(photoId, slotId) {
+  if (!confirm('この写真を削除しますか？')) return;
+  const slot = document.getElementById(slotId);
+  if (slot) slot.remove();
+  if (sb && photoId) {
+    try {
+      const { error } = await sb.from('sagyou_photos').delete().eq('id', photoId);
+      if (error) throw error;
+    } catch(e) {
+      console.log('写真削除エラー:', e);
+    }
+  }
 }
 
 function downloadSelectedPhotos() {
@@ -2251,27 +2266,33 @@ function openEditModal(id) {
   const noticeItems = S.items.notice || DEF_ITEMS.notice;
   const workItems = S.items.work || DEF_ITEMS.work;
 
-  const html = `
-  <div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;overflow-y:auto" id="editModal">
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:640px;margin:20px auto">
-      <div style="color:var(--accent);font-size:16px;font-weight:800;margin-bottom:16px">✏️ 編集 - ${order.orderNum||''}</div>
+  // 車検点検項目HTML生成
+  function editSkItemsHtml(skItems, skResults) {
+    return skItems.map((item, idx) => {
+      const val = (skResults||{})[item.label] || '';
+      const opts = (item.opts||'良好').split('/');
+      const btns = opts.map(o =>
+        `<button onclick="setEditSkWork(${idx},'${o}')" id="esk-${idx}-${o}"
+          style="padding:5px 10px;border:1.5px solid ${val===o?'var(--accent)':'var(--border)'};border-radius:6px;background:${val===o?'var(--accentL)':'var(--bg)'};color:${val===o?'var(--accent)':'var(--sub)'};cursor:pointer;font-size:12px;font-weight:600">${o}</button>`
+      ).join('');
+      return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <span style="flex:1;min-width:100px;font-size:13px">${item.label}</span>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">${btns}</div>
+      </div>`;
+    }).join('');
+  }
 
-      <!-- 基本情報 -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">顧客名</div>
-          <input id="edit-custName" value="${order.custName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
-        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">車名</div>
-          <input id="edit-carName" value="${order.carName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
-        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">ナンバー</div>
-          <input id="edit-carPlate" value="${order.carPlate||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
-        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">出庫予定日</div>
-          <input type="date" id="edit-dateOut" value="${order.dateOut||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
-        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">担当整備士</div>
-          <input id="edit-mechName" value="${order.mechName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
-        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">受付担当</div>
-          <input id="edit-receptionName" value="${order.receptionName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+  // 車検かどうかで表示内容を切り替え
+  const isShakken = order.type === 'shakken';
+  const skItemsList = S.skItems || DEF_SK;
+
+  const checkSectionsHtml = isShakken ? `
+      <!-- 車検点検項目 -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
+        <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px">🔍 車検点検項目</div>
+        <div id="edit-sk-items">${editSkItemsHtml(skItemsList, order.skResults)}</div>
       </div>
-
+  ` : `
       <!-- 依頼事項 -->
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
         <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px">✅ 依頼事項</div>
@@ -2302,6 +2323,30 @@ function openEditModal(id) {
         <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px">🔩 作業内容</div>
         <div class="check-grid">${editCheckGridItems(workItems, order.workItems, 'ework')}</div>
       </div>
+  `;
+
+  const html = `
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;overflow-y:auto" id="editModal">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:640px;margin:20px auto">
+      <div style="color:var(--accent);font-size:16px;font-weight:800;margin-bottom:16px">✏️ 編集 - ${order.orderNum||''}</div>
+
+      <!-- 基本情報 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">顧客名</div>
+          <input id="edit-custName" value="${order.custName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">車名</div>
+          <input id="edit-carName" value="${order.carName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">ナンバー</div>
+          <input id="edit-carPlate" value="${order.carPlate||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">出庫予定日</div>
+          <input type="date" id="edit-dateOut" value="${order.dateOut||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">担当整備士</div>
+          <input id="edit-mechName" value="${order.mechName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+        <div><div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:4px">受付担当</div>
+          <input id="edit-receptionName" value="${order.receptionName||''}" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" /></div>
+      </div>
+
+      ${checkSectionsHtml}
 
       <!-- 備考 -->
       <div style="margin-bottom:14px">
@@ -2319,12 +2364,35 @@ function openEditModal(id) {
 
   // 編集用の一時状態を初期化
   window._editPreventResults = Object.assign({}, order.preventResults || {});
+  window._editSkResults = Object.assign({}, order.skResults || {});
 }
 
 function switchEditRepairTab(type) {
   ['car','truck','aircon'].forEach(t => {
     document.getElementById('edit-'+t+'-grid').style.display = t===type ? '' : 'none';
     document.getElementById('etab-'+t).className = 'btn btn-sm ' + (t===type?'btn-primary':'btn-gray');
+  });
+}
+
+function setEditSkWork(idx, opt) {
+  window._editSkResults = window._editSkResults || {};
+  const item = (S.skItems || DEF_SK)[idx];
+  if (!item) return;
+  if (window._editSkResults[item.label] === opt) {
+    window._editSkResults[item.label] = '';
+  } else {
+    window._editSkResults[item.label] = opt;
+  }
+  const val = window._editSkResults[item.label];
+  // ボタンのスタイルを更新
+  const opts = (item.opts||'良好').split('/');
+  opts.forEach(o => {
+    const btn = document.getElementById(`esk-${idx}-${o}`);
+    if (btn) {
+      btn.style.border = `1.5px solid ${val===o?'var(--accent)':'var(--border)'}`;
+      btn.style.background = val===o?'var(--accentL)':'var(--bg)';
+      btn.style.color = val===o?'var(--accent)':'var(--sub)';
+    }
   });
 }
 
@@ -2367,18 +2435,23 @@ async function saveEdit(id) {
   order.remarks = document.getElementById('edit-remarks').value;
 
   // チェックボックスから選択項目を収集
-  const carItems = S.carRepairItems || DEF_CAR_REPAIR;
-  const truckItems = S.truckRepairItems || DEF_TRUCK_REPAIR;
-  const airconItems = S.airconRepairItems || DEF_AIRCON_REPAIR;
-  const noticeItemsList = S.items.notice || DEF_ITEMS.notice;
-  const workItemsList = S.items.work || DEF_ITEMS.work;
-
-  order.carItems = carItems.filter((_, i) => document.getElementById('ecar-'+i)?.classList.contains('checked'));
-  order.truckItems = truckItems.filter((_, i) => document.getElementById('etruck-'+i)?.classList.contains('checked'));
-  order.airconItems = airconItems.filter((_, i) => document.getElementById('eaircon-'+i)?.classList.contains('checked'));
-  order.noticeItems = noticeItemsList.filter((_, i) => document.getElementById('enotice-'+i)?.classList.contains('checked'));
-  order.workItems = workItemsList.filter((_, i) => document.getElementById('ework-'+i)?.classList.contains('checked'));
-  order.preventResults = Object.assign({}, window._editPreventResults || {});
+  if (order.type === 'shakken') {
+    // 車検の場合は車検点検結果を保存
+    order.skResults = Object.assign({}, window._editSkResults || {});
+  } else {
+    // 一般修理の場合
+    const carItems = S.carRepairItems || DEF_CAR_REPAIR;
+    const truckItems = S.truckRepairItems || DEF_TRUCK_REPAIR;
+    const airconItems = S.airconRepairItems || DEF_AIRCON_REPAIR;
+    const noticeItemsList = S.items.notice || DEF_ITEMS.notice;
+    const workItemsList = S.items.work || DEF_ITEMS.work;
+    order.carItems = carItems.filter((_, i) => document.getElementById('ecar-'+i)?.classList.contains('checked'));
+    order.truckItems = truckItems.filter((_, i) => document.getElementById('etruck-'+i)?.classList.contains('checked'));
+    order.airconItems = airconItems.filter((_, i) => document.getElementById('eaircon-'+i)?.classList.contains('checked'));
+    order.noticeItems = noticeItemsList.filter((_, i) => document.getElementById('enotice-'+i)?.classList.contains('checked'));
+    order.workItems = workItemsList.filter((_, i) => document.getElementById('ework-'+i)?.classList.contains('checked'));
+    order.preventResults = Object.assign({}, window._editPreventResults || {});
+  }
 
   saveState();
   const ok = await sbSaveOrder(order);
@@ -2389,7 +2462,7 @@ async function saveEdit(id) {
     openShijishoView(order);
   } else {
     alert('⚠️ 更新に失敗しました');
-  }SS
+  }
 }
 
 function closeEditModal() {
