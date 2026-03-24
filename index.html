@@ -2380,6 +2380,7 @@ function openEditModal(id) {
   // 編集用の一時状態を初期化
   window._editPreventResults = Object.assign({}, order.preventResults || {});
   window._editSkResults = Object.assign({}, order.skResults || {});
+  window._editIsTruck = isTruckShakken;
 }
 
 function switchEditRepairTab(type) {
@@ -2391,7 +2392,9 @@ function switchEditRepairTab(type) {
 
 function setEditSkWork(idx, opt) {
   window._editSkResults = window._editSkResults || {};
-  const item = (S.skItems || DEF_SK)[idx];
+  const isTruck = window._editIsTruck || false;
+  const itemsList = isTruck ? (S.skTruckItems || DEF_SK_TRUCK) : (S.skItems || DEF_SK);
+  const item = itemsList[idx];
   if (!item) return;
   if (window._editSkResults[item.label] === opt) {
     window._editSkResults[item.label] = '';
@@ -2399,7 +2402,6 @@ function setEditSkWork(idx, opt) {
     window._editSkResults[item.label] = opt;
   }
   const val = window._editSkResults[item.label];
-  // ボタンのスタイルを更新
   const opts = (item.opts||'良好').split('/');
   opts.forEach(o => {
     const btn = document.getElementById(`esk-${idx}-${o}`);
