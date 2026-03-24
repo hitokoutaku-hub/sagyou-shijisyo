@@ -2284,12 +2284,14 @@ function openEditModal(id) {
 
   // 車検かどうかで表示内容を切り替え
   const isShakken = order.type === 'shakken';
-  const skItemsList = S.skItems || DEF_SK;
+  const isTruckShakken = isShakken && order.repairType === 'truck';
+  const skItemsList = isTruckShakken ? (S.skTruckItems || DEF_SK_TRUCK) : (S.skItems || DEF_SK);
+  const skTypeLabel = isTruckShakken ? '🚛 トラック車検点検項目' : '🚗 乗用車車検点検項目';
 
   const checkSectionsHtml = isShakken ? `
       <!-- 車検点検項目 -->
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
-        <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px">🔍 車検点検項目</div>
+        <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px">🔍 ${skTypeLabel}</div>
         <div id="edit-sk-items">${editSkItemsHtml(skItemsList, order.skResults)}</div>
       </div>
   ` : `
