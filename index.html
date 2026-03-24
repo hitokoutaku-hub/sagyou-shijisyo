@@ -1824,15 +1824,22 @@ async function saveShakken() {
   if (!custName && !carName) { alert('顧客名か車名を入力してください'); return; }
 
   const skResults = {};
-  (S.skItems||[]).forEach(item => {
-    skResults[item.label] = S.skCheckState[item.label]?.work || '';
-  });
+  if (skType === 'truck') {
+    (S.skTruckItems||DEF_SK_TRUCK).forEach(item => {
+      skResults[item.label] = S.skTruckCheckState?.[item.label]?.work || '';
+    });
+  } else {
+    (S.skItems||[]).forEach(item => {
+      skResults[item.label] = S.skCheckState[item.label]?.work || '';
+    });
+  }
 
   const orderNum = genOrderNum();
   const order = {
     id: Date.now().toString(),
     orderNum,
     type: 'shakken',
+    repairType: skType,
     status: document.getElementById('sk-status').value,
     custName,
     carName,
@@ -2284,7 +2291,13 @@ function openEditModal(id) {
 
   // 車検かどうかで表示内容を切り替え
   const isShakken = order.type === 'shakken';
-  const isTruckShakken = isShakken && order.repairType === 'truck';
+  // repairTypeがない場合はskResultsのキーでトラック判定
+  const truckKeys = DEF_SK_TRUCK.map(i => i.label);
+  const skResultKeys = Object.keys(order.skResults || {});
+  const isTruckShakken = isShakken && (
+    order.repairType === 'truck' ||
+    (skResultKeys.length > 0 && skResultKeys.some(k => truckKeys.includes(k)))
+  );
   const skItemsList = isTruckShakken ? (S.skTruckItems || DEF_SK_TRUCK) : (S.skItems || DEF_SK);
   const skTypeLabel = isTruckShakken ? '🚛 トラック車検点検項目' : '🚗 乗用車車検点検項目';
 
