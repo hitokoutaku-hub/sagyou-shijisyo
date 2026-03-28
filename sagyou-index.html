@@ -3,8 +3,6 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxODAgMTgwIj4KICA8cmVjdCB3aWR0aD0iMTgwIiBoZWlnaHQ9IjE4MCIgcng9IjQwIiBmaWxsPSIjMWExYTFhIi8+CiAgPHRleHQgeD0iOTAiIHk9IjExNSIgZm9udC1zaXplPSIxMDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCflKc8L3RleHQ+CiAgPHRleHQgeD0iOTAiIHk9IjE1OCIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9ImJvbGQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZjhjMDAiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIj7mlbTlgpnnrqHnkIY8L3RleHQ+Cjwvc3ZnPg==">
-<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxODAgMTgwIj4KICA8cmVjdCB3aWR0aD0iMTgwIiBoZWlnaHQ9IjE4MCIgcng9IjQwIiBmaWxsPSIjMWExYTFhIi8+CiAgPHRleHQgeD0iOTAiIHk9IjExNSIgZm9udC1zaXplPSIxMDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCflKc8L3RleHQ+CiAgPHRleHQgeD0iOTAiIHk9IjE1OCIgZm9udC1zaXplPSIxMyIgZm9udC13ZWlnaHQ9ImJvbGQiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZjhjMDAiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIj7mlbTlgpnnrqHnkIY8L3RleHQ+Cjwvc3ZnPg==">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>作業指示書管理システム｜整備工場</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -170,6 +168,37 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
 .inp-wrap { position: relative; }
 .inp-wrap input { padding-right: 44px; }
 </style>
+
+<script>
+(function(){
+  var c=document.createElement('canvas');
+  c.width=c.height=180;
+  var ctx=c.getContext('2d');
+  // 背景
+  ctx.fillStyle='#1a1a1a';
+  ctx.beginPath();
+  ctx.roundRect(0,0,180,180,[40]);
+  ctx.fill();
+  // 絵文字
+  ctx.font='80px serif';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText('🔧',90,95);
+  // テキスト
+  ctx.font='bold 14px sans-serif';
+  ctx.fillStyle='#ff8c00';
+  ctx.fillText('整備管理',90,155);
+  var png=c.toDataURL('image/png');
+  var link=document.createElement('link');
+  link.rel='apple-touch-icon';
+  link.href=png;
+  document.head.appendChild(link);
+  // favicon
+  var fav=document.querySelector("link[rel*='icon']")||document.createElement('link');
+  fav.rel='icon';fav.href=png;
+  document.head.appendChild(fav);
+})();
+</script>
 </head>
 <body>
 <div id="app">
