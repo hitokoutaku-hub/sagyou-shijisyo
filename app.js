@@ -1186,6 +1186,7 @@ function openEditModal(id) {
   if (!order) return;
   editOrder = JSON.parse(JSON.stringify(order));
   editRepairType = order.repairType || 'car';
+  editSkType = order.repairType || 'car';
   editCarCheck   = {};
   editTruckCheck = {};
   editAirconCheck= {};
@@ -1196,8 +1197,16 @@ function openEditModal(id) {
   (order.carItems||[]).forEach(k => editCarCheck[k] = true);
   (order.truckItems||[]).forEach(k => editTruckCheck[k] = true);
   (order.airconItems||[]).forEach(k => editAirconCheck[k] = true);
-  Object.entries(order.skResults||{}).forEach(([k,v]) => { if(v) editSkCheck[k] = v; });
-  Object.entries(order.skResults||{}).forEach(([k,v]) => { if(v) editSkTruckCheck[k] = {work:v}; });
+
+  // 車検の選択状態を復元（全項目に対して）
+  if (order.type === 'shakken') {
+    Object.entries(order.skResults||{}).forEach(([k,v]) => {
+      if(v) {
+        editSkCheck[k] = v;
+        editSkTruckCheck[k] = {work: v};
+      }
+    });
+  }
 
   document.body.insertAdjacentHTML('beforeend', `
   <div style="position:fixed;inset:0;background:var(--bg);z-index:700;overflow-y:auto" id="editModal">
@@ -1331,21 +1340,29 @@ function renderEditSkItems() {
   if (editSkType === 'car') {
     const c = document.getElementById('edit-sk-car-items'); if(!c) return;
     c.innerHTML = '';
-    (S.skItems||DEF_SK).forEach((item, idx) => {
+    (S.skItems||DEF_SK).forEach((item) => {
       const cur = editSkCheck[item.label] || '';
       const opts = (item.opts||'良好').split('/');
       const d = document.createElement('div'); d.className = 'sk-item';
-      d.innerHTML = `<span class="sk-item-label">${item.label}</span><div class="sk-btns">${opts.map(o=>`<button class="sk-btn${cur===o?' sel':''}" onclick="setEditSkWork('${item.label}','${o}')">${o}</button>`).join('')}</div>`;
+      d.innerHTML = `<span class="sk-item-label">${item.label}</span><div class="sk-btns">${opts.map(o=>`<button class="sk-btn${cur===o?' sel':''}" onclick="setEditSkWork('${item.label.replace(/'/g,"\\'")}','${o}')">${o}</button>`).join('')}</div>`;
       c.appendChild(d);
     });
   } else {
     const c = document.getElementById('edit-sk-truck-items'); if(!c) return;
     c.innerHTML = '';
-    (S.skTruckItems||DEF_SK_TRUCK).forEach((item, idx) => {
+    // 整備KIT/シールKIT/分解無しの特別ボタン
+    const kitVal = editSkTruckCheck['__kit__']?.work || '';
+    const kitDiv = document.createElement('div');
+    kitDiv.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap';
+    kitDiv.innerHTML = ['整備KIT','シールKIT','分解無し'].map(o=>`<button class="sk-btn${kitVal===o?' sel':''}" style="padding:8px 16px;font-size:13px" onclick="setEditSkTruckWork('__kit__','${o}')">${o}</button>`).join('');
+    c.appendChild(kitDiv);
+
+    (S.skTruckItems||DEF_SK_TRUCK).forEach((item) => {
+      if(item.label===' ') return; // 最初の空ラベルはスキップ（上でkit処理済み）
       const cur = editSkTruckCheck[item.label]?.work || '';
       const opts = (item.opts||'交換/不要').split('/');
       const d = document.createElement('div'); d.className = 'sk-item';
-      d.innerHTML = `<span class="sk-item-label">${item.label}</span><div class="sk-btns">${opts.map(o=>`<button class="sk-btn${cur===o?' sel':''}" onclick="setEditSkTruckWork('${item.label}','${o}')">${o}</button>`).join('')}</div>`;
+      d.innerHTML = `<span class="sk-item-label">${item.label}</span><div class="sk-btns">${opts.map(o=>`<button class="sk-btn${cur===o?' sel':''}" onclick="setEditSkTruckWork('${item.label.replace(/'/g,"\\'")}','${o}')">${o}</button>`).join('')}</div>`;
       c.appendChild(d);
     });
   }
