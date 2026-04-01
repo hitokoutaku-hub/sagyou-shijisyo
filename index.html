@@ -10,10 +10,8 @@
 </head>
 <body>
 
-<!-- ▼▼▼ ログイン画面 ▼▼▼ -->
 <div id="loginScreen" style="display:flex"></div>
 
-<!-- ▼▼▼ メインアプリ ▼▼▼ -->
 <div id="app">
   <div class="header">
     <h1>🔧 作業指示書管理システム</h1>
@@ -33,7 +31,6 @@
     <div class="tab" onclick="switchTab('accident')">🚨 事故</div>
     <div class="tab" onclick="switchTab('settings')">⚙️ 設定</div>
   </div>
-  <!-- オーナー専用タブ（ログイン後に表示） -->
   <div id="ownerTab" style="display:none;margin-bottom:10px">
     <div class="tab owner-tab" onclick="switchTab('owner')" style="width:100%;display:block;text-align:center">👑 オーナー管理</div>
   </div>
@@ -50,7 +47,8 @@
         <div>
           <label>ステータス</label>
           <select id="r-status">
-            <option value="入庫中">入庫中</option>
+            <option value="入庫待ち">入庫待ち</option>
+            <option value="入庫中" selected>入庫中</option>
             <option value="作業中">作業中</option>
             <option value="完了">完了</option>
             <option value="引渡済">引渡済</option>
@@ -86,10 +84,8 @@
           </div>
         </div>
       </div>
-      <!-- メイン担当（自動入力・変更不可） -->
       <label>メイン担当</label>
-      <div id="mechFixedRepair"></div>
-      <!-- サブ担当 -->
+      <div id="mechSelectRepair"></div>
       <div id="subStaffArea"></div>
     </div>
 
@@ -148,7 +144,12 @@
         <select id="filterMonth" onchange="loadList()" style="flex:1;min-width:120px"><option value="">全月</option></select>
         <select id="filterStatus" onchange="loadList()">
           <option value="">全ステータス</option>
-          <option>入庫中</option><option>作業中</option><option>完了</option><option>引渡済</option><option>車検中</option>
+          <option>入庫待ち</option>
+          <option>入庫中</option>
+          <option>作業中</option>
+          <option>完了</option>
+          <option>引渡済</option>
+          <option>車検中</option>
         </select>
         <select id="filterType" onchange="loadList()">
           <option value="">全種別</option>
@@ -178,7 +179,8 @@
         <div>
           <label>ステータス</label>
           <select id="sk-status">
-            <option value="車検中">車検中</option>
+            <option value="入庫待ち">入庫待ち</option>
+            <option value="車検中" selected>車検中</option>
             <option value="完了">完了</option>
             <option value="引渡済">引渡済</option>
           </select>
@@ -194,7 +196,7 @@
         <div><label>出庫予定日</label><input type="date" id="sk-dateOut"></div>
       </div>
       <label>メイン担当</label>
-      <div id="mechFixedShakken"></div>
+      <div id="mechSelectShakken"></div>
       <div id="subStaffAreaShakken"></div>
     </div>
     <div class="card">
@@ -253,7 +255,8 @@
         <div>
           <label>ステータス</label>
           <select id="ac-status">
-            <option value="入庫中">入庫中</option>
+            <option value="入庫待ち">入庫待ち</option>
+            <option value="入庫中" selected>入庫中</option>
             <option value="作業中">作業中</option>
             <option value="完了">完了</option>
             <option value="引渡済">引渡済</option>
@@ -288,7 +291,7 @@
         </div>
       </div>
       <label>メイン担当</label>
-      <div id="mechFixedAccident"></div>
+      <div id="mechSelectAccident"></div>
     </div>
     <div class="card">
       <div class="card-title">🏢 保険会社</div>
@@ -366,14 +369,6 @@
       <div id="insuranceSettings"></div>
     </div>
     <div class="card">
-      <div class="card-title">☁️ GAS連携（レガシー）</div>
-      <input id="gasUrl" placeholder="https://script.google.com/macros/s/...">
-      <div class="btn-row">
-        <button class="btn btn-primary btn-sm" onclick="saveGasUrl()">保存</button>
-        <button class="btn btn-sm btn-danger"  onclick="clearGasUrl()">削除</button>
-      </div>
-    </div>
-    <div class="card">
       <div class="card-title">🔢 採番リセット</div>
       <button class="btn btn-sm btn-danger" onclick="resetCounter()">連番をリセット</button>
     </div>
@@ -385,7 +380,6 @@
   </div>
 </div>
 
-<!-- 全画面入力 -->
 <div class="fs-modal" id="fsModal">
   <div class="fs-header">
     <span class="fs-label" id="fsLabel">入力</span>
