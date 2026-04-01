@@ -323,11 +323,55 @@ function switchTab(tab) {
   if (tab==='owner')    renderOwnerPanel();
 }
 
-// ─── 担当者 ──────────────────────────────────────────────────
-function renderMechFixed(containerId) {
+// ─── 担当者（スタッフ選択式） ────────────────────────────────
+async function renderMechSelect(containerId) {
   const el = document.getElementById(containerId);
-  if (!el || !currentUser) return;
-  el.innerHTML = `<div class="mech-fixed">👤 ${currentUser.name}</div>`;
+  if (!el) return;
+  let allStaff = [];
+  if (sb) {
+    try {
+      const { data } = await sb.from(DB_TABLES.STAFF).select('id,name,is_owner').order('name');
+      allStaff = data || [];
+    } catch(e) {}
+  }
+  const btnStyle = (s) => `padding:10px 16px;border:2px solid var(--border);border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;background:var(--bg);color:var(--text);transition:.12s`;
+  el.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
+      ${allStaff.map(s => `
+        <button id="mech-btn-${containerId}-${s.id}"
+          onclick="selectMech('${containerId}','${s.id}','${s.name.replace(/'/g,"\\'")}')"
+          style="${btnStyle(s)}"
+        >${s.is_owner ? '👑' : '👤'} ${s.name}</button>`).join('')}
+    </div>
+    <input type="hidden" id="mech-id-${containerId}" value="">
+    <input type="hidden" id="mech-name-${containerId}" value="">
+  `;
+}
+
+function selectMech(containerId, id, name) {
+  document.getElementById(`mech-id-${containerId}`).value = id;
+  document.getElementById(`mech-name-${containerId}`).value = name;
+  // ボタンの見た目を更新
+  const parent = document.getElementById(containerId);
+  if (!parent) return;
+  parent.querySelectorAll('button[id^="mech-btn-"]').forEach(btn => {
+    btn.style.background = 'var(--bg)';
+    btn.style.color = 'var(--text)';
+    btn.style.borderColor = 'var(--border)';
+  });
+  const selected = document.getElementById(`mech-btn-${containerId}-${id}`);
+  if (selected) {
+    selected.style.background = 'var(--accent)';
+    selected.style.color = '#000';
+    selected.style.borderColor = 'var(--accent)';
+  }
+}
+
+function getMechName(containerId) {
+  return document.getElementById(`mech-name-${containerId}`)?.value || '';
+}
+function getMechId(containerId) {
+  return document.getElementById(`mech-id-${containerId}`)?.value || '';
 }
 
 // ─── サブ担当 ────────────────────────────────────────────────
@@ -805,8 +849,8 @@ async function saveRepair() {
     carPlate:  document.getElementById('r-carPlate').value,
     dateIn:    document.getElementById('r-dateIn').value,
     dateOut:   document.getElementById('r-dateOut').value,
-    mechName:  currentUser?.name || '',
-    mechId:    currentUser?.id   || '',
+    mechName:  getMechName('mechSelectRepair'),
+    mechId:    getMechId('mechSelectRepair'),
     subStaff:  [...currentSubStaff],
     receptionName: '',
     remarks:   document.getElementById('r-remarks').value,
@@ -867,7 +911,7 @@ async function saveAccident() {
     carPlate: document.getElementById('ac-carPlate').value,
     dateIn:   document.getElementById('ac-dateIn').value,
     dateOut:  document.getElementById('ac-dateOut').value,
-    mechName: currentUser?.name||'', mechId: currentUser?.id||'',
+    mechName: getMechName('mechSelectAccident'), mechId: getMechId('mechSelectAccident'),
     subStaff: [...currentSubStaff],
     insurance, remarks: document.getElementById('ac-remarks').value,
     savedAt:  new Date().toLocaleString('ja-JP'),
@@ -914,7 +958,7 @@ async function saveShakken() {
     carPlate: document.getElementById('sk-carPlate').value,
     dateIn:   document.getElementById('sk-dateIn').value,
     dateOut:  document.getElementById('sk-dateOut').value,
-    mechName: currentUser?.name||'', mechId: currentUser?.id||'',
+    mechName: getMechName('mechSelectShakken'), mechId: getMechId('mechSelectShakken'),
     subStaff: [...currentSubStaff],
     remarks:  document.getElementById('sk-remarks').value,
     skResults, savedAt: new Date().toLocaleString('ja-JP'),
@@ -1791,9 +1835,9 @@ function initApp() {
   renderCarRepairItems();
   renderInsuranceSelect();
 
-  renderMechFixed('mechFixedRepair');
-  renderMechFixed('mechFixedShakken');
-  renderMechFixed('mechFixedAccident');
+  renderMechSelect('mechSelectRepair');
+  renderMechSelect('mechSelectShakken');
+  renderMechSelect('mechSelectAccident');
 
   renderSubStaffArea();
 
