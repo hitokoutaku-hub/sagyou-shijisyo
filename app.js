@@ -2,17 +2,6 @@
  * ============================================================
  *  app.js — 作業指示書管理システム v2 メインロジック
  * ============================================================
- *  ★ このファイルは通常触らない ★
- *  設定変更は config.js、デザイン変更は style.css で行う
- *
- *  主な改善点：
- *  ・二重保存防止（保存中はボタン無効化）
- *  ・IDログインと連動した担当者自動入力（変更不可）
- *  ・サブ担当参加機能
- *  ・作業実績の自動集計（オーナーのみ閲覧可）
- *  ・トースト通知（alertの廃止）
- *  ・エラーハンドリング強化
- * ============================================================
  */
 
 // ─── Supabase初期化 ───────────────────────────────────────────
@@ -52,8 +41,7 @@ let S = {
   counter:            {},
 };
 
-// 現在の指示書に参加しているサブ担当
-let currentSubStaff = []; // [{ id, name }]
+let currentSubStaff = [];
 let currentOrder    = null;
 
 // ─── ローカルストレージ ───────────────────────────────────────
@@ -335,7 +323,7 @@ function switchTab(tab) {
   if (tab==='owner')    renderOwnerPanel();
 }
 
-// ─── 担当者（ログインユーザーで自動入力・変更不可） ──────────
+// ─── 担当者 ──────────────────────────────────────────────────
 function renderMechFixed(containerId) {
   const el = document.getElementById(containerId);
   if (!el || !currentUser) return;
@@ -346,8 +334,6 @@ function renderMechFixed(containerId) {
 async function renderSubStaffArea() {
   const area = document.getElementById('subStaffArea');
   if (!area) return;
-
-  // ログイン中のスタッフ一覧を取得
   let allStaff = [];
   if (sb) {
     try {
@@ -355,16 +341,13 @@ async function renderSubStaffArea() {
       allStaff = (data || []).filter(s => s.id !== currentUser?.id);
     } catch(e) {}
   }
-
   const subTags = currentSubStaff.map(s =>
     `<span class="sub-staff-tag">👤 ${s.name}<button onclick="removeSubStaff('${s.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;margin-left:4px">×</button></span>`
   ).join('');
-
   const staffBtns = allStaff
     .filter(s => !currentSubStaff.find(sub => sub.id === s.id))
     .map(s => `<button class="btn btn-gray btn-sm" onclick="addSubStaff('${s.id}','${s.name.replace(/'/g,"\\'")}')">＋ ${s.name}</button>`)
     .join('');
-
   area.innerHTML = `
     <div class="sub-staff-area">
       <div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">サブ担当（任意）</div>
@@ -803,7 +786,7 @@ function clearGasUrl() { S.gasUrl=''; document.getElementById('gasUrl').value=''
 
 // ─── 保存：一般修理 ───────────────────────────────────────────
 async function saveRepair() {
-  if (isSaving) return; // 二重保存防止
+  if (isSaving) return;
   const custName = document.getElementById('r-custName').value.trim();
   const carName  = document.getElementById('r-carName').value.trim();
   if (!custName && !carName) { showToast('顧客名か車名を入力してください', 'error'); return; }
@@ -1079,7 +1062,6 @@ async function openShijishoView(order) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>`);
   }
 
-  // サブ担当参加ボタン（自分がまだ参加していない場合）
   const alreadyInOrder = order.mechId===currentUser?.id || (order.subStaff||[]).some(s=>s.id===currentUser?.id);
   const joinBtn = !alreadyInOrder ? `
     <button class="btn btn-info btn-sm" onclick="joinAsSubStaff('${order.id}')">🙋 サブ担当として参加</button>` : '';
@@ -1095,6 +1077,7 @@ async function openShijishoView(order) {
         <span class="badge badge-${order.status}" style="font-size:13px;padding:5px 14px">${order.status}</span>
         ${joinBtn}
         <button class="btn btn-ok btn-sm" onclick="openAddPhotoModal('${order.id}')">📷 写真追加</button>
+        <button class="btn btn-info btn-sm" onclick="openEditModal('${order.id}')">✏️ 編集</button>
         <button class="btn btn-gray btn-sm" onclick="openManageModal('${order.id}')">⚙️ 管理</button>
         <button class="btn btn-primary btn-sm" style="background:#06c755" onclick="sendLineReport('${order.id}')">💬 LINE</button>
         <button class="btn btn-primary btn-sm" onclick="closeShijishoView()">✕</button>
@@ -1188,6 +1171,241 @@ function openManageModal(id) {
 
 function closeManageModal() { document.getElementById('manageModal')?.remove(); }
 
+// ─── 編集モーダル ─────────────────────────────────────────────
+let editOrder = null;
+let editRepairType = 'car';
+let editSkType = 'car';
+let editCarCheck = {};
+let editTruckCheck = {};
+let editAirconCheck = {};
+let editSkCheck = {};
+let editSkTruckCheck = {};
+
+function openEditModal(id) {
+  const order = S.orders.find(o => o.id === id);
+  if (!order) return;
+  editOrder = JSON.parse(JSON.stringify(order));
+  editRepairType = order.repairType || 'car';
+  editCarCheck   = {};
+  editTruckCheck = {};
+  editAirconCheck= {};
+  editSkCheck    = {};
+  editSkTruckCheck = {};
+
+  // チェック状態を復元
+  (order.carItems||[]).forEach(k => editCarCheck[k] = true);
+  (order.truckItems||[]).forEach(k => editTruckCheck[k] = true);
+  (order.airconItems||[]).forEach(k => editAirconCheck[k] = true);
+  Object.entries(order.skResults||{}).forEach(([k,v]) => { if(v) editSkCheck[k] = v; });
+  Object.entries(order.skResults||{}).forEach(([k,v]) => { if(v) editSkTruckCheck[k] = {work:v}; });
+
+  document.body.insertAdjacentHTML('beforeend', `
+  <div style="position:fixed;inset:0;background:var(--bg);z-index:700;overflow-y:auto" id="editModal">
+    <div style="position:sticky;top:0;background:var(--card);border-bottom:2px solid var(--accent);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;z-index:10;gap:8px">
+      <div style="font-size:16px;font-weight:800;color:var(--accent)">✏️ 編集 - ${order.orderNum||''}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveEdit()">💾 保存</button>
+        <button class="btn btn-gray btn-sm" onclick="closeEditModal()">✕</button>
+      </div>
+    </div>
+    <div style="max-width:900px;margin:0 auto;padding:16px">
+
+      <!-- 基本情報 -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">基本情報</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">顧客名</div>
+            <input id="edit-custName" value="${order.custName||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">車名</div>
+            <input id="edit-carName" value="${order.carName||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">ナンバー</div>
+            <input id="edit-carPlate" value="${order.carPlate||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">出庫予定日</div>
+            <input id="edit-dateOut" type="date" value="${order.dateOut||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">担当整備士</div>
+            <input id="edit-mechName" value="${order.mechName||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">ステータス</div>
+            <select id="edit-status" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+              ${['入庫中','作業中','完了','引渡済','車検中'].map(s=>`<option value="${s}" ${order.status===s?'selected':''}>${s}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <div style="font-size:11px;color:var(--sub);margin-bottom:4px">備考・メモ</div>
+          <textarea id="edit-remarks" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;height:80px">${order.remarks||''}</textarea>
+        </div>
+      </div>
+
+      <!-- 依頼事項（修理の場合） -->
+      ${order.type==='repair' ? `
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">✅ 依頼事項</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <button id="etab-car"    class="btn btn-sm ${editRepairType==='car'?'btn-primary':'btn-gray'}"    onclick="switchEditRepairType('car')">🚗 乗用車</button>
+          <button id="etab-truck"  class="btn btn-sm ${editRepairType==='truck'?'btn-primary':'btn-gray'}"  onclick="switchEditRepairType('truck')">🚛 トラック</button>
+          <button id="etab-aircon" class="btn btn-sm ${editRepairType==='aircon'?'btn-primary':'btn-gray'}" onclick="switchEditRepairType('aircon')">❄️ エアコン</button>
+        </div>
+        <div id="edit-car-items"    style="display:${editRepairType==='car'?'':'none'}"></div>
+        <div id="edit-truck-items"  style="display:${editRepairType==='truck'?'':'none'}"></div>
+        <div id="edit-aircon-items" style="display:${editRepairType==='aircon'?'':'none'}"></div>
+      </div>` : ''}
+
+      <!-- 車検点検項目（車検の場合） -->
+      ${order.type==='shakken' ? `
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">🔍 車検点検項目</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <button id="esk-tab-car"   class="btn btn-sm ${editSkType==='car'?'btn-primary':'btn-gray'}"   onclick="switchEditSkType('car')">🚗 乗用車</button>
+          <button id="esk-tab-truck" class="btn btn-sm ${editSkType==='truck'?'btn-primary':'btn-gray'}" onclick="switchEditSkType('truck')">🚛 トラック</button>
+        </div>
+        <div id="edit-sk-car-items"   style="display:${editSkType==='car'?'':'none'}"></div>
+        <div id="edit-sk-truck-items" style="display:${editSkType==='truck'?'':'none'}"></div>
+      </div>` : ''}
+
+    </div>
+  </div>`);
+
+  // チェックリスト描画
+  if (order.type==='repair') {
+    renderEditRepairItems();
+  }
+  if (order.type==='shakken') {
+    editSkType = order.repairType || 'car';
+    renderEditSkItems();
+  }
+}
+
+function switchEditRepairType(type) {
+  editRepairType = type;
+  ['car','truck','aircon'].forEach(t => {
+    document.getElementById('edit-'+t+'-items').style.display = t===type ? '' : 'none';
+    document.getElementById('etab-'+t).className = 'btn btn-sm ' + (t===type?'btn-primary':'btn-gray');
+  });
+  renderEditRepairItems();
+}
+
+function switchEditSkType(type) {
+  editSkType = type;
+  document.getElementById('edit-sk-car-items').style.display   = type==='car'   ? '' : 'none';
+  document.getElementById('edit-sk-truck-items').style.display = type==='truck' ? '' : 'none';
+  document.getElementById('esk-tab-car').className   = 'btn btn-sm '+(type==='car'?'btn-primary':'btn-gray');
+  document.getElementById('esk-tab-truck').className = 'btn btn-sm '+(type==='truck'?'btn-primary':'btn-gray');
+  renderEditSkItems();
+}
+
+function renderEditRepairItems() {
+  const configs = {
+    car:    { id:'edit-car-items',    items: S.carRepairItems||DEF_CAR_REPAIR,      state: editCarCheck },
+    truck:  { id:'edit-truck-items',  items: S.truckRepairItems||DEF_TRUCK_REPAIR,  state: editTruckCheck },
+    aircon: { id:'edit-aircon-items', items: S.airconRepairItems||DEF_AIRCON_REPAIR, state: editAirconCheck },
+  };
+  Object.entries(configs).forEach(([type, cfg]) => {
+    const c = document.getElementById(cfg.id); if(!c) return;
+    c.innerHTML = '';
+    cfg.items.forEach(label => {
+      const checked = cfg.state[label] || false;
+      const d = document.createElement('div');
+      d.className = 'check-item' + (checked?' checked':'');
+      d.innerHTML = `<span>${checked?'✅':'⬜'}</span><span>${label}</span>`;
+      d.onclick = () => {
+        cfg.state[label] = !cfg.state[label];
+        renderEditRepairItems();
+      };
+      c.appendChild(d);
+    });
+  });
+}
+
+function renderEditSkItems() {
+  if (editSkType === 'car') {
+    const c = document.getElementById('edit-sk-car-items'); if(!c) return;
+    c.innerHTML = '';
+    (S.skItems||DEF_SK).forEach((item, idx) => {
+      const cur = editSkCheck[item.label] || '';
+      const opts = (item.opts||'良好').split('/');
+      const d = document.createElement('div'); d.className = 'sk-item';
+      d.innerHTML = `<span class="sk-item-label">${item.label}</span><div class="sk-btns">${opts.map(o=>`<button class="sk-btn${cur===o?' sel':''}" onclick="setEditSkWork('${item.label}','${o}')">${o}</button>`).join('')}</div>`;
+      c.appendChild(d);
+    });
+  } else {
+    const c = document.getElementById('edit-sk-truck-items'); if(!c) return;
+    c.innerHTML = '';
+    (S.skTruckItems||DEF_SK_TRUCK).forEach((item, idx) => {
+      const cur = editSkTruckCheck[item.label]?.work || '';
+      const opts = (item.opts||'交換/不要').split('/');
+      const d = document.createElement('div'); d.className = 'sk-item';
+      d.innerHTML = `<span class="sk-item-label">${item.label}</span><div class="sk-btns">${opts.map(o=>`<button class="sk-btn${cur===o?' sel':''}" onclick="setEditSkTruckWork('${item.label}','${o}')">${o}</button>`).join('')}</div>`;
+      c.appendChild(d);
+    });
+  }
+}
+
+function setEditSkWork(label, val) {
+  editSkCheck[label] = editSkCheck[label]===val ? '' : val;
+  renderEditSkItems();
+}
+
+function setEditSkTruckWork(label, val) {
+  editSkTruckCheck[label] = editSkTruckCheck[label]?.work===val ? {} : {work:val};
+  renderEditSkItems();
+}
+
+async function saveEdit() {
+  if (!editOrder) return;
+  const order = S.orders.find(o => o.id === editOrder.id);
+  if (!order) return;
+
+  order.custName  = document.getElementById('edit-custName')?.value.trim() || order.custName;
+  order.carName   = document.getElementById('edit-carName')?.value.trim()  || order.carName;
+  order.carPlate  = document.getElementById('edit-carPlate')?.value.trim() || order.carPlate;
+  order.dateOut   = document.getElementById('edit-dateOut')?.value          || order.dateOut;
+  order.mechName  = document.getElementById('edit-mechName')?.value.trim() || order.mechName;
+  order.status    = document.getElementById('edit-status')?.value           || order.status;
+  order.remarks   = document.getElementById('edit-remarks')?.value          || '';
+
+  if (order.type === 'repair') {
+    order.repairType  = editRepairType;
+    order.carItems    = Object.entries(editCarCheck).filter(([,v])=>v).map(([k])=>k);
+    order.truckItems  = Object.entries(editTruckCheck).filter(([,v])=>v).map(([k])=>k);
+    order.airconItems = Object.entries(editAirconCheck).filter(([,v])=>v).map(([k])=>k);
+  }
+
+  if (order.type === 'shakken') {
+    order.repairType = editSkType;
+    const skResults = {};
+    if (editSkType === 'car') {
+      Object.entries(editSkCheck).forEach(([k,v]) => { if(v) skResults[k] = v; });
+    } else {
+      Object.entries(editSkTruckCheck).forEach(([k,v]) => { if(v?.work) skResults[k] = v.work; });
+    }
+    order.skResults = skResults;
+  }
+
+  order.savedAt = new Date().toLocaleString('ja-JP');
+  saveState();
+  const ok = await sbSaveOrder(order);
+  showToast(ok ? '✅ 保存しました' : '⚠️ ローカルに保存しました', ok?'success':'error');
+  closeEditModal();
+  closeShijishoView();
+  openShijishoView(order);
+}
+
+function closeEditModal() {
+  document.getElementById('editModal')?.remove();
+  editOrder = null;
+}
+
 function openAddPhotoModal(orderId) {
   document.body.insertAdjacentHTML('beforeend',`
   <div style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:600;display:flex;align-items:flex-end;justify-content:center" id="addPhotoModal">
@@ -1248,27 +1466,36 @@ function closeFs() {
   document.getElementById('fsModal').classList.remove('open'); fsTargetId=null;
 }
 
-// ─── オーナー専用パネル ───────────────────────────────────────
+// ─── オーナー専用パネル（期間指定フィルター付き） ─────────────
 async function renderOwnerPanel() {
   if (!currentUser?.is_owner) return;
   const panel = document.getElementById('panel-owner'); if(!panel) return;
+
+  // 既存の日付入力値を保持
+  const fromDate = document.getElementById('ownerFromDate')?.value || '';
+  const toDate   = document.getElementById('ownerToDate')?.value   || '';
+
   panel.innerHTML = '<div class="loading"><span class="spinner"></span> 集計中...</div>';
 
   if (sbReady) { const sbOrders=await sbLoadOrders(); if(sbOrders!==null) S.orders=sbOrders; }
 
-  const now     = new Date();
-  const thisYM  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const monthly = S.orders.filter(o=>(o.dateIn||'').startsWith(thisYM));
+  const now    = new Date();
+  const thisYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 
-  // 全体集計
-  const total      = S.orders.length;
-  const totalMonth = monthly.length;
+  // 期間フィルター適用
+  let filtered = S.orders;
+  if (fromDate) filtered = filtered.filter(o => (o.dateIn||'') >= fromDate);
+  if (toDate)   filtered = filtered.filter(o => (o.dateIn||'') <= toDate);
+
+  const monthly      = filtered.filter(o=>(o.dateIn||'').startsWith(thisYM));
+  const total        = filtered.length;
+  const totalMonth   = monthly.length;
   const statusCounts = {};
-  S.orders.forEach(o=>{ statusCounts[o.status]=(statusCounts[o.status]||0)+1; });
+  filtered.forEach(o=>{ statusCounts[o.status]=(statusCounts[o.status]||0)+1; });
 
-  // スタッフ別集計（メイン＋サブ両方カウント）
-  const staffCounts = {};
-  S.orders.forEach(o=>{
+  // スタッフ別集計
+  const staffCounts  = {};
+  filtered.forEach(o=>{
     if(o.mechName) staffCounts[o.mechName]=(staffCounts[o.mechName]||0)+1;
     (o.subStaff||[]).forEach(s=>{ staffCounts[s.name]=(staffCounts[s.name]||0)+1; });
   });
@@ -1277,7 +1504,6 @@ async function renderOwnerPanel() {
     if(o.mechName) staffMonthly[o.mechName]=(staffMonthly[o.mechName]||0)+1;
     (o.subStaff||[]).forEach(s=>{ staffMonthly[s.name]=(staffMonthly[s.name]||0)+1; });
   });
-
   const staffRanking = Object.entries(staffCounts).sort(([,a],[,b])=>b-a);
 
   // ログイン履歴
@@ -1289,21 +1515,44 @@ async function renderOwnerPanel() {
     }catch(e){}
   }
 
+  const periodLabel = (fromDate || toDate)
+    ? `${fromDate||'〜'} 〜 ${toDate||'〜'}`
+    : '全期間';
+
   panel.innerHTML = `
     <div class="card">
       <div class="card-title">👑 オーナー管理画面</div>
+
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="color:var(--sub);font-size:11px;font-weight:700;margin-bottom:10px">📅 期間指定</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="ownerFromDate" value="${fromDate}"
+            style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;flex:1;min-width:130px">
+          <span style="color:var(--sub);font-weight:700">〜</span>
+          <input type="date" id="ownerToDate" value="${toDate}"
+            style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;flex:1;min-width:130px">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="renderOwnerPanel()"
+            style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#000;font-weight:700;cursor:pointer;font-size:13px">🔍 絞り込む</button>
+          <button onclick="clearOwnerFilter()"
+            style="padding:10px 16px;background:var(--border);border:none;border-radius:8px;color:var(--text);cursor:pointer;font-size:13px">リセット</button>
+        </div>
+        ${fromDate||toDate ? `<div style="margin-top:8px;font-size:12px;color:var(--accent);text-align:center">表示中: ${periodLabel}</div>` : ''}
+      </div>
+
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-num">${totalMonth}</div><div class="stat-label">今月の件数</div></div>
-        <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">累計件数</div></div>
+        <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">${fromDate||toDate?'期間内件数':'累計件数'}</div></div>
         <div class="stat-card"><div class="stat-num">${statusCounts['作業中']||0}</div><div class="stat-label">現在作業中</div></div>
         <div class="stat-card"><div class="stat-num">${statusCounts['入庫中']||0}</div><div class="stat-label">入庫中</div></div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">📊 スタッフ別作業実績（累計）</div>
+      <div class="card-title">📊 スタッフ別作業実績${fromDate||toDate?'（期間指定）':'（累計）'}</div>
       <table class="staff-stats-table">
-        <thead><tr><th>順位</th><th>スタッフ</th><th>今月</th><th>累計</th></tr></thead>
+        <thead><tr><th>順位</th><th>スタッフ</th><th>今月</th><th>${fromDate||toDate?'期間内':'累計'}</th></tr></thead>
         <tbody>
           ${staffRanking.map(([name,count],i)=>`
             <tr>
@@ -1334,6 +1583,14 @@ async function renderOwnerPanel() {
     </div>`;
 }
 
+function clearOwnerFilter() {
+  const from = document.getElementById('ownerFromDate');
+  const to   = document.getElementById('ownerToDate');
+  if(from) from.value = '';
+  if(to)   to.value   = '';
+  renderOwnerPanel();
+}
+
 // ─── 初期化 ───────────────────────────────────────────────────
 function initApp() {
   document.title = COMPANY.title + '｜' + COMPANY.name;
@@ -1346,12 +1603,10 @@ function initApp() {
   renderCarRepairItems();
   renderInsuranceSelect();
 
-  // メイン担当を自動入力
   renderMechFixed('mechFixedRepair');
   renderMechFixed('mechFixedShakken');
   renderMechFixed('mechFixedAccident');
 
-  // サブ担当エリア
   renderSubStaffArea();
 
   setTimeout(()=>loadMasters(), 500);
