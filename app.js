@@ -1159,7 +1159,7 @@ function openManageModal(id) {
       <div style="color:var(--accent);font-size:16px;font-weight:800;margin-bottom:16px">⚙️ 管理 - ${order.orderNum||''}</div>
       <div style="color:var(--sub);font-size:12px;font-weight:700;margin-bottom:8px">ステータス変更</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
-        ${['入庫中','作業中','完了','引渡済','車検中'].map(s=>`<button class="btn btn-sm${order.status===s?' btn-primary':' btn-gray'}" onclick="changeStatus('${id}','${s}');closeManageModal()">${s}</button>`).join('')}
+        ${['入庫待ち','入庫中','作業中','完了','引渡済','車検中'].map(s=>`<button class="btn btn-sm${order.status===s?' btn-primary':' btn-gray'}" onclick="changeStatus('${id}','${s}');closeManageModal()">${s}</button>`).join('')}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteOrder('${id}');closeManageModal();closeShijishoView()">🗑️ 削除</button>
@@ -1192,6 +1192,9 @@ function openEditModal(id) {
   editAirconCheck= {};
   editSkCheck    = {};
   editSkTruckCheck = {};
+  editSkNotice  = {};
+  editSkPrevent = {};
+  editSkLights  = {};
 
   // チェック状態を復元
   (order.carItems||[]).forEach(k => editCarCheck[k] = true);
@@ -1206,6 +1209,9 @@ function openEditModal(id) {
         editSkTruckCheck[k] = {work: v};
       }
     });
+    Object.entries(order.skTruckNotice||{}).forEach(([k,v]) => { if(v) editSkNotice[k] = v; });
+    Object.entries(order.skTruckPrevent||{}).forEach(([k,v]) => { if(v) editSkPrevent[k] = v; });
+    Object.entries(order.skTruckLights||{}).forEach(([k,v]) => { if(v) editSkLights[k] = v; });
   }
 
   document.body.insertAdjacentHTML('beforeend', `
@@ -1246,7 +1252,7 @@ function openEditModal(id) {
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">ステータス</div>
             <select id="edit-status" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
-              ${['入庫中','作業中','完了','引渡済','車検中'].map(s=>`<option value="${s}" ${order.status===s?'selected':''}>${s}</option>`).join('')}
+              ${['入庫待ち','入庫中','作業中','完了','引渡済','車検中'].map(s=>`<option value="${s}" ${order.status===s?'selected':''}>${s}</option>`).join('')}
             </select>
           </div>
         </div>
@@ -1280,6 +1286,24 @@ function openEditModal(id) {
         </div>
         <div id="edit-sk-car-items"   style="display:${editSkType==='car'?'':'none'}"></div>
         <div id="edit-sk-truck-items" style="display:${editSkType==='truck'?'':'none'}"></div>
+      </div>
+
+      <!-- 灯火類（トラックのみ） -->
+      <div class="card" style="margin-bottom:12px;display:${editSkType==='truck'?'block':'none'}" id="edit-lights-card">
+        <div class="card-title">💡 灯火類</div>
+        <div id="edit-sk-lights"></div>
+      </div>
+
+      <!-- 気がついた事 -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">👁️ 気がついた事</div>
+        <div id="edit-sk-notice"></div>
+      </div>
+
+      <!-- 予防整備チェック -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">🛡️ 予防整備チェック</div>
+        <div id="edit-sk-prevent"></div>
       </div>` : ''}
 
     </div>
@@ -1292,6 +1316,9 @@ function openEditModal(id) {
   if (order.type==='shakken') {
     editSkType = order.repairType || 'car';
     renderEditSkItems();
+    renderEditSkNotice();
+    renderEditSkPrevent();
+    if (editSkType === 'truck') renderEditSkLights();
   }
 }
 
@@ -1310,7 +1337,87 @@ function switchEditSkType(type) {
   document.getElementById('edit-sk-truck-items').style.display = type==='truck' ? '' : 'none';
   document.getElementById('esk-tab-car').className   = 'btn btn-sm '+(type==='car'?'btn-primary':'btn-gray');
   document.getElementById('esk-tab-truck').className = 'btn btn-sm '+(type==='truck'?'btn-primary':'btn-gray');
+  const lightsCard = document.getElementById('edit-lights-card');
+  if (lightsCard) lightsCard.style.display = type==='truck' ? 'block' : 'none';
   renderEditSkItems();
+  if (type==='truck') renderEditSkLights();
+}
+
+let editSkNotice  = {};
+let editSkPrevent = {};
+let editSkLights  = {};
+
+function renderEditSkNotice() {
+  const c = document.getElementById('edit-sk-notice'); if(!c) return;
+  // 初期値を復元
+  if (editOrder) {
+    Object.entries(editOrder.skTruckNotice||{}).forEach(([k,v])=>{ if(v) editSkNotice[k]=v; });
+  }
+  c.innerHTML = DEF_SK_TRUCK_NOTICE.map(label => {
+    const val = editSkNotice[label]||'';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <span style="flex:1;font-size:14px">${label}</span>
+      <button onclick="setEditSkNotice('${label}','OK')" style="padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:${val==='OK'?'var(--ok)':'var(--border)'};color:${val==='OK'?'#fff':'var(--sub)'}">OK</button>
+      <button onclick="setEditSkNotice('${label}','NG')" style="padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:${val==='NG'?'var(--danger)':'var(--border)'};color:${val==='NG'?'#fff':'var(--sub)'}">NG</button>
+    </div>`;
+  }).join('');
+}
+
+function setEditSkNotice(label, val) {
+  editSkNotice[label] = editSkNotice[label]===val ? '' : val;
+  renderEditSkNotice();
+}
+
+function renderEditSkPrevent() {
+  const c = document.getElementById('edit-sk-prevent'); if(!c) return;
+  if (editOrder) {
+    Object.entries(editOrder.skTruckPrevent||{}).forEach(([k,v])=>{ if(v) editSkPrevent[k]=v; });
+  }
+  c.innerHTML = DEF_SK_TRUCK_PREVENT.map(label => {
+    const val = editSkPrevent[label]||'';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <span style="flex:1;font-size:14px">${label}</span>
+      <button onclick="setEditSkPrevent('${label}','OK')" style="padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:${val==='OK'?'var(--ok)':'var(--border)'};color:${val==='OK'?'#fff':'var(--sub)'}">OK</button>
+      <button onclick="setEditSkPrevent('${label}','NG')" style="padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:${val==='NG'?'var(--danger)':'var(--border)'};color:${val==='NG'?'#fff':'var(--sub)'}">NG</button>
+    </div>`;
+  }).join('');
+}
+
+function setEditSkPrevent(label, val) {
+  editSkPrevent[label] = editSkPrevent[label]===val ? '' : val;
+  renderEditSkPrevent();
+}
+
+function renderEditSkLights() {
+  const c = document.getElementById('edit-sk-lights'); if(!c) return;
+  if (editOrder) {
+    Object.entries(editOrder.skTruckLights||{}).forEach(([k,v])=>{ if(v) editSkLights[k]=v; });
+  }
+  const headItems  = ['ヘッドライト球（HID）左','ヘッドライト球（HID）右','ヘッドライト球（ハロゲン）左','ヘッドライト球（ハロゲン）右'];
+  const countItems = ['ポジション球','ウインカー球','車高灯','ナンバー灯球','マーカー球','マーカーASSY','メーターパネル球','フォグランプ球','スイッチ球'];
+  let html = '';
+  headItems.forEach(label => {
+    const val = editSkLights[label]||'';
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <span style="flex:1;font-size:13px">${label}</span>
+      <div style="display:flex;gap:4px">
+        <button class="sk-btn${val==='交換'?' sel':''}" onclick="setEditSkLight('${label}','交換')">交換</button>
+        <button class="sk-btn${val==='不要'?' sel':''}" onclick="setEditSkLight('${label}','不要')">不要</button>
+      </div></div>`;
+  });
+  countItems.forEach(label => {
+    const val = editSkLights[label]||'';
+    const opts = ['不要','1個','2個','3個','4個','5個'];
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <span style="flex:1;font-size:13px">${label}</span>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">${opts.map(o=>`<button class="sk-btn${val===o?' sel':''}" onclick="setEditSkLight('${label}','${o}')">${o}</button>`).join('')}</div></div>`;
+  });
+  c.innerHTML = html;
+}
+
+function setEditSkLight(label, val) {
+  editSkLights[label] = editSkLights[label]===val ? '' : val;
+  renderEditSkLights();
 }
 
 function renderEditRepairItems() {
@@ -1406,7 +1513,10 @@ async function saveEdit() {
     } else {
       Object.entries(editSkTruckCheck).forEach(([k,v]) => { if(v?.work) skResults[k] = v.work; });
     }
-    order.skResults = skResults;
+    order.skResults     = skResults;
+    order.skTruckNotice  = { ...editSkNotice };
+    order.skTruckPrevent = { ...editSkPrevent };
+    order.skTruckLights  = { ...editSkLights };
   }
 
   order.savedAt = new Date().toLocaleString('ja-JP');
@@ -1421,6 +1531,9 @@ async function saveEdit() {
 function closeEditModal() {
   document.getElementById('editModal')?.remove();
   editOrder = null;
+  editSkNotice = {};
+  editSkPrevent = {};
+  editSkLights = {};
 }
 
 function openAddPhotoModal(orderId) {
