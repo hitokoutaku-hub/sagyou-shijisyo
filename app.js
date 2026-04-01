@@ -1195,11 +1195,19 @@ function openEditModal(id) {
   editSkNotice  = {};
   editSkPrevent = {};
   editSkLights  = {};
+  editRepairNotice  = {};
+  editRepairPrevent = {};
 
   // チェック状態を復元
   (order.carItems||[]).forEach(k => editCarCheck[k] = true);
   (order.truckItems||[]).forEach(k => editTruckCheck[k] = true);
   (order.airconItems||[]).forEach(k => editAirconCheck[k] = true);
+
+  // 修理のnotice/preventを復元
+  if (order.type === 'repair') {
+    (order.noticeItems||[]).forEach(k => editRepairNotice[k] = true);
+    Object.entries(order.preventResults||{}).forEach(([k,v]) => { if(v) editRepairPrevent[k] = v; });
+  }
 
   // 車検の選択状態を復元（全項目に対して）
   if (order.type === 'shakken') {
@@ -1274,6 +1282,18 @@ function openEditModal(id) {
         <div id="edit-car-items"    style="display:${editRepairType==='car'?'':'none'}"></div>
         <div id="edit-truck-items"  style="display:${editRepairType==='truck'?'':'none'}"></div>
         <div id="edit-aircon-items" style="display:${editRepairType==='aircon'?'':'none'}"></div>
+      </div>
+
+      <!-- 気がついた事（修理） -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">👁️ 気がついた事</div>
+        <div id="edit-repair-notice"></div>
+      </div>
+
+      <!-- 予防整備チェック（修理） -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">🛡️ 予防整備チェック</div>
+        <div id="edit-repair-prevent"></div>
       </div>` : ''}
 
       <!-- 車検点検項目（車検の場合） -->
@@ -1312,6 +1332,8 @@ function openEditModal(id) {
   // チェックリスト描画
   if (order.type==='repair') {
     renderEditRepairItems();
+    renderEditRepairNotice();
+    renderEditRepairPrevent();
   }
   if (order.type==='shakken') {
     editSkType = order.repairType || 'car';
@@ -1346,6 +1368,40 @@ function switchEditSkType(type) {
 let editSkNotice  = {};
 let editSkPrevent = {};
 let editSkLights  = {};
+let editRepairNotice  = {};
+let editRepairPrevent = {};
+
+function renderEditRepairNotice() {
+  const c = document.getElementById('edit-repair-notice'); if(!c) return;
+  c.innerHTML = (S.items.notice||DEF_NOTICE).map(label => {
+    const checked = editRepairNotice[label] || false;
+    return `<div class="check-item${checked?' checked':''}" onclick="toggleEditRepairNotice('${label.replace(/'/g,"\\'")}')">
+      <span>${checked?'✅':'⬜'}</span><span>${label}</span>
+    </div>`;
+  }).join('');
+}
+
+function toggleEditRepairNotice(label) {
+  editRepairNotice[label] = !editRepairNotice[label];
+  renderEditRepairNotice();
+}
+
+function renderEditRepairPrevent() {
+  const c = document.getElementById('edit-repair-prevent'); if(!c) return;
+  c.innerHTML = DEF_PREVENT_OKNG.map(label => {
+    const val = editRepairPrevent[label]||'';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <span style="flex:1;font-size:14px">${label}</span>
+      <button onclick="setEditRepairPrevent('${label.replace(/'/g,"\\'")}','OK')" style="padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:${val==='OK'?'var(--ok)':'var(--border)'};color:${val==='OK'?'#fff':'var(--sub)'}">OK</button>
+      <button onclick="setEditRepairPrevent('${label.replace(/'/g,"\\'")}','NG')" style="padding:8px 18px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:${val==='NG'?'var(--danger)':'var(--border)'};color:${val==='NG'?'#fff':'var(--sub)'}">NG</button>
+    </div>`;
+  }).join('');
+}
+
+function setEditRepairPrevent(label, val) {
+  editRepairPrevent[label] = editRepairPrevent[label]===val ? '' : val;
+  renderEditRepairPrevent();
+}
 
 function renderEditSkNotice() {
   const c = document.getElementById('edit-sk-notice'); if(!c) return;
@@ -1499,10 +1555,12 @@ async function saveEdit() {
   order.remarks   = document.getElementById('edit-remarks')?.value          || '';
 
   if (order.type === 'repair') {
-    order.repairType  = editRepairType;
-    order.carItems    = Object.entries(editCarCheck).filter(([,v])=>v).map(([k])=>k);
-    order.truckItems  = Object.entries(editTruckCheck).filter(([,v])=>v).map(([k])=>k);
-    order.airconItems = Object.entries(editAirconCheck).filter(([,v])=>v).map(([k])=>k);
+    order.repairType    = editRepairType;
+    order.carItems      = Object.entries(editCarCheck).filter(([,v])=>v).map(([k])=>k);
+    order.truckItems    = Object.entries(editTruckCheck).filter(([,v])=>v).map(([k])=>k);
+    order.airconItems   = Object.entries(editAirconCheck).filter(([,v])=>v).map(([k])=>k);
+    order.noticeItems   = Object.entries(editRepairNotice).filter(([,v])=>v).map(([k])=>k);
+    order.preventResults= { ...editRepairPrevent };
   }
 
   if (order.type === 'shakken') {
