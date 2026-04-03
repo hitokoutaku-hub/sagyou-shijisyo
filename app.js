@@ -1095,7 +1095,7 @@ async function openShijishoView(order) {
           <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
           <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
         </div>
-        <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border)">
+        <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen('${p.photo_b64}','${p.photo_type}')">
       </div>`).join('');
     photoHtml=shijishoSection('📷 写真',`
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -1194,6 +1194,20 @@ function sendLineReport(orderId) {
 }
 
 function closeShijishoView() { document.getElementById('shijishoView')?.remove(); }
+
+// ─── 写真全画面表示 ───────────────────────────────────────────
+function openPhotoFullscreen(src, type) {
+  document.body.insertAdjacentHTML('beforeend', `
+  <div id="photoFullscreen" onclick="closePhotoFullscreen()"
+    style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out">
+    <div style="color:#fff;font-size:13px;font-weight:700;margin-bottom:12px;opacity:0.8">${type} — タップして閉じる</div>
+    <img src="${src}" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
+  </div>`);
+}
+
+function closePhotoFullscreen() {
+  document.getElementById('photoFullscreen')?.remove();
+}
 
 function openManageModal(id) {
   const order=S.orders.find(o=>o.id===id); if(!order) return;
