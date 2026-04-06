@@ -1833,4 +1833,87 @@ async function renderOwnerPanel() {
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button onclick="renderOwnerPanel()"
-            style="flex:1;padding:10px;background:var(--accent);border:none;border-rad
+            style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#000;font-weight:700;cursor:pointer;font-size:13px">🔍 絞り込む</button>
+          <button onclick="clearOwnerFilter()"
+            style="padding:10px 16px;background:var(--border);border:none;border-radius:8px;color:var(--text);cursor:pointer;font-size:13px">リセット</button>
+        </div>
+        ${fromDate||toDate ? `<div style="margin-top:8px;font-size:12px;color:var(--accent);text-align:center">表示中: ${periodLabel}</div>` : ''}
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-num">${totalMonth}</div><div class="stat-label">今月の件数</div></div>
+        <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">${fromDate||toDate?'期間内件数':'累計件数'}</div></div>
+        <div class="stat-card"><div class="stat-num">${statusCounts['作業中']||0}</div><div class="stat-label">現在作業中</div></div>
+        <div class="stat-card"><div class="stat-num">${statusCounts['入庫中']||0}</div><div class="stat-label">入庫中</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 スタッフ別作業実績${fromDate||toDate?'（期間指定）':'（累計）'}</div>
+      <table class="staff-stats-table">
+        <thead><tr><th>順位</th><th>スタッフ</th><th>今月</th><th>${fromDate||toDate?'期間内':'累計'}</th></tr></thead>
+        <tbody>
+          ${staffRanking.map(([name,count],i)=>`
+            <tr>
+              <td><span class="rank-badge rank-${i+1}">${i+1}</span></td>
+              <td style="font-weight:700">${name}</td>
+              <td style="color:var(--accent);font-weight:700">${staffMonthly[name]||0}件</td>
+              <td>${count}件</td>
+            </tr>`).join('')}
+          ${staffRanking.length===0?'<tr><td colspan="4" style="text-align:center;color:var(--sub);padding:20px">データがありません</td></tr>':''}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔐 ログイン履歴（直近30件）</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${loginLogs.map(log=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+            <span style="font-size:18px">${log.action==='login'?'🔓':'🔒'}</span>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:700">${log.staff_name}</div>
+              <div style="font-size:11px;color:var(--sub)">${log.action==='login'?'ログイン':'ログアウト'}</div>
+            </div>
+            <div style="font-size:11px;color:var(--sub)">${new Date(log.logged_at).toLocaleString('ja-JP')}</div>
+          </div>`).join('')}
+        ${loginLogs.length===0?'<div style="text-align:center;color:var(--sub);padding:20px">履歴がありません</div>':''}
+      </div>
+    </div>`;
+}
+
+function clearOwnerFilter() {
+  const from = document.getElementById('ownerFromDate');
+  const to   = document.getElementById('ownerToDate');
+  if(from) from.value = '';
+  if(to)   to.value   = '';
+  renderOwnerPanel();
+}
+
+// ─── 初期化 ───────────────────────────────────────────────────
+function initApp() {
+  document.title = COMPANY.title + '｜' + COMPANY.name;
+  const h1=document.querySelector('.header h1'); if(h1) h1.textContent='🔧 '+COMPANY.title;
+
+  loadState();
+  updateSyncUI();
+  updateNumDisplay();
+  renderAllChecklists();
+  renderCarRepairItems();
+  renderInsuranceSelect();
+
+  renderMechSelect('mechSelectRepair');
+  renderMechSelect('mechSelectShakken');
+  renderMechSelect('mechSelectAccident');
+
+  renderSubStaffArea();
+
+  setTimeout(()=>loadMasters(), 500);
+
+  const today=new Date().toISOString().split('T')[0];
+  ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
+}
+
+// ─── 起動 ─────────────────────────────────────────────────────
+initSupabase();
+initAuth();
