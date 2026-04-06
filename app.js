@@ -1032,16 +1032,13 @@ async function loadList() {
   if(!orders.length) { c.innerHTML='<div class="empty">📋 指示書がありません</div>'; return; }
   c.innerHTML=orders.map(o => {
     const subNames = (o.subStaff||[]).map(s=>s.name).join('・');
-    return `<div class="order-item" style="position:relative">
-      <div onclick="showDetail('${o.id}')" style="cursor:pointer">
-        <div class="top">
-          <span class="order-num">${o.orderNum||'（番号なし）'}</span>
-          <span class="badge badge-${o.status}">${o.status}</span>
-        </div>
-        <div class="order-info">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}　${o.carPlate?'【'+o.carPlate+'】':''}</div>
-        <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}</div>
+    return `<div class="order-item" onclick="showDetail('${o.id}')">
+      <div class="top">
+        <span class="order-num">${o.orderNum||'（番号なし）'}</span>
+        <span class="badge badge-${o.status}">${o.status}</span>
       </div>
-      <button onclick="event.stopPropagation();deleteOrder('${o.id}');loadList();" style="position:absolute;top:10px;right:10px;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:4px 10px;cursor:pointer">🗑️ 削除</button>
+      <div class="order-info">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}　${o.carPlate?'【'+o.carPlate+'】':''}</div>
+      <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}</div>
     </div>`;
   }).join('');
 }
