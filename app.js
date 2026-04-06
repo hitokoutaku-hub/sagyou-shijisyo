@@ -849,6 +849,10 @@ async function saveRepair() {
     carPlate:  document.getElementById('r-carPlate').value,
     dateIn:    document.getElementById('r-dateIn').value,
     dateOut:   document.getElementById('r-dateOut').value,
+    nyukoMethod: document.getElementById('r-nyukoMethod')?.value||'',
+    nyukoTime:   document.getElementById('r-nyukoTime')?.value||'',
+    nyukoPlace:  document.getElementById('r-nyukoPlace')?.value.trim()||'',
+    partsPending: document.getElementById('r-partsPending')?.checked||false,
     mechName:  getMechName('mechSelectRepair'),
     mechId:    getMechId('mechSelectRepair'),
     subStaff:  [...currentSubStaff],
@@ -880,9 +884,11 @@ async function saveRepair() {
 }
 
 function clearRepair() {
-  ['r-custName','r-carName','r-carPlate','r-dateIn','r-dateOut','r-remarks'].forEach(id => {
+  ['r-custName','r-carName','r-carPlate','r-dateIn','r-dateOut','r-remarks','r-nyukoPlace','r-nyukoTime'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
   });
+  const nyukoMethod=document.getElementById('r-nyukoMethod'); if(nyukoMethod) nyukoMethod.value='';
+  const partsPending=document.getElementById('r-partsPending'); if(partsPending) partsPending.checked=false;
   document.getElementById('r-status').value = '入庫中';
   document.getElementById('r-dateIn').value = new Date().toISOString().split('T')[0];
   S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={};
@@ -1032,13 +1038,26 @@ async function loadList() {
   if(!orders.length) { c.innerHTML='<div class="empty">📋 指示書がありません</div>'; return; }
   c.innerHTML=orders.map(o => {
     const subNames = (o.subStaff||[]).map(s=>s.name).join('・');
+    const nyukoInfo = [
+      o.nyukoMethod ? o.nyukoMethod : '',
+      o.nyukoPlace  ? `📍${o.nyukoPlace}` : '',
+      o.nyukoTime   ? `⏰${o.nyukoTime}` : '',
+    ].filter(Boolean).join('　');
+    const partsBadge = o.partsPending ? `<span style="background:#7a1a1a;color:#ff7070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">🔴 部品待ち</span>` : '';
+    const allItems=[...(o.carItems||[]),...(o.truckItems||[]),...(o.airconItems||[]),...(o.skResults?Object.keys(o.skResults).filter(k=>o.skResults[k]):[])].slice(0,3);
+    const itemsPreview = allItems.length ? `<div class="order-info" style="color:var(--accent);font-size:11px">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>` : '';
     return `<div class="order-item" onclick="showDetail('${o.id}')">
       <div class="top">
         <span class="order-num">${o.orderNum||'（番号なし）'}</span>
-        <span class="badge badge-${o.status}">${o.status}</span>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          ${partsBadge}
+          <span class="badge badge-${o.status}">${o.status}</span>
+        </div>
       </div>
       <div class="order-info">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}　${o.carPlate?'【'+o.carPlate+'】':''}</div>
       <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}</div>
+      ${nyukoInfo?`<div class="order-info" style="color:#88aaff;font-size:12px">${nyukoInfo}</div>`:''}
+      ${itemsPreview}
     </div>`;
   }).join('');
 }
@@ -1333,6 +1352,29 @@ function openEditModal(id) {
           <div style="font-size:11px;color:var(--sub);margin-bottom:4px">備考・メモ</div>
           <textarea id="edit-remarks" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;height:80px">${order.remarks||''}</textarea>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">入庫手段</div>
+            <select id="edit-nyukoMethod" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+              <option value="" ${!order.nyukoMethod?'selected':''}>未設定</option>
+              <option value="お客入庫" ${order.nyukoMethod==='お客入庫'?'selected':''}>🚗 お客入庫</option>
+              <option value="引き取り" ${order.nyukoMethod==='引き取り'?'selected':''}>🔑 引き取り</option>
+              <option value="レッカー"  ${order.nyukoMethod==='レッカー'?'selected':''}>🚨 レッカー</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">入庫予定時間</div>
+            <input id="edit-nyukoTime" type="time" value="${order.nyukoTime||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">引き取り場所</div>
+            <input id="edit-nyukoPlace" value="${order.nyukoPlace||''}" placeholder="例：高槻市〇〇町" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding-top:20px">
+            <div style="font-size:13px;font-weight:700;color:#ff7070">🔴 部品待ち</div>
+            <input type="checkbox" id="edit-partsPending" ${order.partsPending?'checked':''} style="width:22px;height:22px;cursor:pointer;accent-color:var(--danger)">
+          </div>
+        </div>
       </div>
 
       <!-- 依頼事項（修理の場合） -->
@@ -1618,6 +1660,10 @@ async function saveEdit() {
   order.mechName  = document.getElementById('edit-mechName')?.value.trim() || order.mechName;
   order.status    = document.getElementById('edit-status')?.value           || order.status;
   order.remarks   = document.getElementById('edit-remarks')?.value          || '';
+  order.nyukoMethod  = document.getElementById('edit-nyukoMethod')?.value  || '';
+  order.nyukoTime    = document.getElementById('edit-nyukoTime')?.value     || '';
+  order.nyukoPlace   = document.getElementById('edit-nyukoPlace')?.value.trim() || '';
+  order.partsPending = document.getElementById('edit-partsPending')?.checked || false;
 
   if (order.type === 'repair') {
     order.repairType    = editRepairType;
@@ -1787,87 +1833,4 @@ async function renderOwnerPanel() {
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button onclick="renderOwnerPanel()"
-            style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#000;font-weight:700;cursor:pointer;font-size:13px">🔍 絞り込む</button>
-          <button onclick="clearOwnerFilter()"
-            style="padding:10px 16px;background:var(--border);border:none;border-radius:8px;color:var(--text);cursor:pointer;font-size:13px">リセット</button>
-        </div>
-        ${fromDate||toDate ? `<div style="margin-top:8px;font-size:12px;color:var(--accent);text-align:center">表示中: ${periodLabel}</div>` : ''}
-      </div>
-
-      <div class="stats-grid">
-        <div class="stat-card"><div class="stat-num">${totalMonth}</div><div class="stat-label">今月の件数</div></div>
-        <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">${fromDate||toDate?'期間内件数':'累計件数'}</div></div>
-        <div class="stat-card"><div class="stat-num">${statusCounts['作業中']||0}</div><div class="stat-label">現在作業中</div></div>
-        <div class="stat-card"><div class="stat-num">${statusCounts['入庫中']||0}</div><div class="stat-label">入庫中</div></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">📊 スタッフ別作業実績${fromDate||toDate?'（期間指定）':'（累計）'}</div>
-      <table class="staff-stats-table">
-        <thead><tr><th>順位</th><th>スタッフ</th><th>今月</th><th>${fromDate||toDate?'期間内':'累計'}</th></tr></thead>
-        <tbody>
-          ${staffRanking.map(([name,count],i)=>`
-            <tr>
-              <td><span class="rank-badge rank-${i+1}">${i+1}</span></td>
-              <td style="font-weight:700">${name}</td>
-              <td style="color:var(--accent);font-weight:700">${staffMonthly[name]||0}件</td>
-              <td>${count}件</td>
-            </tr>`).join('')}
-          ${staffRanking.length===0?'<tr><td colspan="4" style="text-align:center;color:var(--sub);padding:20px">データがありません</td></tr>':''}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <div class="card-title">🔐 ログイン履歴（直近30件）</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        ${loginLogs.map(log=>`
-          <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
-            <span style="font-size:18px">${log.action==='login'?'🔓':'🔒'}</span>
-            <div style="flex:1">
-              <div style="font-size:14px;font-weight:700">${log.staff_name}</div>
-              <div style="font-size:11px;color:var(--sub)">${log.action==='login'?'ログイン':'ログアウト'}</div>
-            </div>
-            <div style="font-size:11px;color:var(--sub)">${new Date(log.logged_at).toLocaleString('ja-JP')}</div>
-          </div>`).join('')}
-        ${loginLogs.length===0?'<div style="text-align:center;color:var(--sub);padding:20px">履歴がありません</div>':''}
-      </div>
-    </div>`;
-}
-
-function clearOwnerFilter() {
-  const from = document.getElementById('ownerFromDate');
-  const to   = document.getElementById('ownerToDate');
-  if(from) from.value = '';
-  if(to)   to.value   = '';
-  renderOwnerPanel();
-}
-
-// ─── 初期化 ───────────────────────────────────────────────────
-function initApp() {
-  document.title = COMPANY.title + '｜' + COMPANY.name;
-  const h1=document.querySelector('.header h1'); if(h1) h1.textContent='🔧 '+COMPANY.title;
-
-  loadState();
-  updateSyncUI();
-  updateNumDisplay();
-  renderAllChecklists();
-  renderCarRepairItems();
-  renderInsuranceSelect();
-
-  renderMechSelect('mechSelectRepair');
-  renderMechSelect('mechSelectShakken');
-  renderMechSelect('mechSelectAccident');
-
-  renderSubStaffArea();
-
-  setTimeout(()=>loadMasters(), 500);
-
-  const today=new Date().toISOString().split('T')[0];
-  ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
-}
-
-// ─── 起動 ─────────────────────────────────────────────────────
-initSupabase();
-initAuth();
+            style="flex:1;padding:10px;background:var(--accent);border:none;border-rad
