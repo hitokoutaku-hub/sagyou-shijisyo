@@ -1021,17 +1021,27 @@ async function loadList() {
   if(filterKeyword) orders=orders.filter(o=>
     (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
     (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword));
+  const statusOrder={'作業中':0,'車検中':1,'入庫中':2,'入庫待ち':3,'完了':4,'引渡済':5};
+  orders.sort((a,b)=>{
+    const aO=statusOrder[a.status]??99;
+    const bO=statusOrder[b.status]??99;
+    if(aO!==bO)return aO-bO;
+    return (b.dateIn||'').localeCompare(a.dateIn||'');
+  });
   const el=document.getElementById('listSyncLabel'); if(el) el.textContent=sbReady?'クラウド同期済み':'ローカル保存';
   if(!orders.length) { c.innerHTML='<div class="empty">📋 指示書がありません</div>'; return; }
   c.innerHTML=orders.map(o => {
     const subNames = (o.subStaff||[]).map(s=>s.name).join('・');
-    return `<div class="order-item" onclick="showDetail('${o.id}')">
-      <div class="top">
-        <span class="order-num">${o.orderNum||'（番号なし）'}</span>
-        <span class="badge badge-${o.status}">${o.status}</span>
+    return `<div class="order-item" style="position:relative">
+      <div onclick="showDetail('${o.id}')" style="cursor:pointer">
+        <div class="top">
+          <span class="order-num">${o.orderNum||'（番号なし）'}</span>
+          <span class="badge badge-${o.status}">${o.status}</span>
+        </div>
+        <div class="order-info">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}　${o.carPlate?'【'+o.carPlate+'】':''}</div>
+        <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}</div>
       </div>
-      <div class="order-info">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}　${o.carPlate?'【'+o.carPlate+'】':''}</div>
-      <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}</div>
+      <button onclick="event.stopPropagation();deleteOrder('${o.id}');loadList();" style="position:absolute;top:10px;right:10px;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:4px 10px;cursor:pointer">🗑️ 削除</button>
     </div>`;
   }).join('');
 }
@@ -1220,7 +1230,7 @@ function openManageModal(id) {
         ${['入庫待ち','入庫中','作業中','完了','引渡済','車検中'].map(s=>`<button class="btn btn-sm${order.status===s?' btn-primary':' btn-gray'}" onclick="changeStatus('${id}','${s}');closeManageModal()">${s}</button>`).join('')}
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteOrder('${id}');closeManageModal();closeShijishoView()">🗑️ 削除</button>
+        <button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteOrder('${id}');closeManageModal();closeShijishoView();loadList()">🗑️ 削除</button>
         <button class="btn btn-gray btn-sm" style="flex:1" onclick="closeManageModal()">キャンセル</button>
       </div>
     </div>
@@ -1692,7 +1702,7 @@ function changeStatus(id,status) {
 
 function deleteOrder(id) {
   if(!confirm('この指示書を削除しますか？')) return;
-  S.orders=S.orders.filter(o=>o.id!==id); saveState(); sbDeleteOrder(id); loadList();
+  S.orders=S.orders.filter(o=>o.id!==id); saveState(); sbDeleteOrder(id);
   showToast('削除しました','info');
 }
 
