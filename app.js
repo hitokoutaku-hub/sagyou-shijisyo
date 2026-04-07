@@ -1058,9 +1058,10 @@ async function loadList() {
     const partsBadge = o.partsPending ? `<span style="background:#7a1a1a;color:#ff7070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">🔴 部品待ち</span>` : '';
     const allItems=[...(o.carItems||[]),...(o.truckItems||[]),...(o.airconItems||[]),...(o.skResults?Object.keys(o.skResults).filter(k=>o.skResults[k]):[])].slice(0,3);
     const itemsPreview = allItems.length ? `<div class="order-info" style="color:var(--accent);font-size:11px">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>` : '';
-    return `<div class="order-item" onclick="showDetail('${o.id}')">
+    const isToday = (o.dateIn||'')=== new Date().toISOString().split('T')[0];
+    return `<div class="order-item" onclick="showDetail('${o.id}')" style="${isToday?'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);':''}">
       <div class="top">
-        <span class="order-num">${o.orderNum||'（番号なし）'}</span>
+        <span class="order-num">${isToday?'🔥 ':''}${o.orderNum||'（番号なし）'}</span>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${partsBadge}
           <span class="badge badge-${o.status}">${o.status}</span>
