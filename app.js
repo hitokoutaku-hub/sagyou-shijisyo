@@ -964,6 +964,10 @@ async function saveShakken() {
     carPlate: document.getElementById('sk-carPlate').value,
     dateIn:   document.getElementById('sk-dateIn').value,
     dateOut:  document.getElementById('sk-dateOut').value,
+    nyukoMethod: document.getElementById('sk-nyukoMethod')?.value||'',
+    nyukoTime:   document.getElementById('sk-nyukoTime')?.value||'',
+    nyukoPlace:  document.getElementById('sk-nyukoPlace')?.value.trim()||'',
+    partsPending: document.getElementById('sk-partsPending')?.checked||false,
     mechName: getMechName('mechSelectShakken'), mechId: getMechId('mechSelectShakken'),
     subStaff: [...currentSubStaff],
     remarks:  document.getElementById('sk-remarks').value,
@@ -979,9 +983,11 @@ async function saveShakken() {
 }
 
 function clearShakken() {
-  ['sk-custName','sk-carName','sk-carPlate','sk-dateIn','sk-dateOut','sk-remarks'].forEach(id => {
+  ['sk-custName','sk-carName','sk-carPlate','sk-dateIn','sk-dateOut','sk-remarks','sk-nyukoPlace','sk-nyukoTime'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
   });
+  const skNyukoMethod=document.getElementById('sk-nyukoMethod'); if(skNyukoMethod) skNyukoMethod.value='';
+  const skPartsPending=document.getElementById('sk-partsPending'); if(skPartsPending) skPartsPending.checked=false;
   document.getElementById('sk-dateIn').value=new Date().toISOString().split('T')[0];
   S.skCheckState={}; S.skTruckCheckState={}; S.skTruckNotice={}; S.skTruckPrevent={}; S.skTruckLights={};
   ['sk-preview-receipt','sk-preview-repair'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
@@ -1359,7 +1365,7 @@ function openEditModal(id) {
               <option value="" ${!order.nyukoMethod?'selected':''}>未設定</option>
               <option value="お客入庫" ${order.nyukoMethod==='お客入庫'?'selected':''}>🚗 お客入庫</option>
               <option value="引き取り" ${order.nyukoMethod==='引き取り'?'selected':''}>🔑 引き取り</option>
-              <option value="レッカー"  ${order.nyukoMethod==='レッカー'?'selected':''}>🚨 レッカー</option>
+              <option value="レッカー" ${order.nyukoMethod==='レッカー'?'selected':''}>🚨 レッカー</option>
             </select>
           </div>
           <div>
