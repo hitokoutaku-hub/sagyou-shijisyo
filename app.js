@@ -122,6 +122,8 @@ async function sbSaveOrder(order) {
       sk_truck_check: order.skTruckCheckState, sk_truck_notice: order.skTruckNotice,
       sk_truck_prevent: order.skTruckPrevent, sk_truck_lights: order.skTruckLights,
       saved_at: order.savedAt,
+      nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
+      nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
     });
     if (error) throw error;
     return true;
@@ -151,6 +153,8 @@ async function sbLoadOrders() {
       skResults: row.sk_results || {}, skTruckCheckState: row.sk_truck_check || {},
       skTruckNotice: row.sk_truck_notice || {}, skTruckPrevent: row.sk_truck_prevent || {},
       skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at,
+      nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
+      nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
     }));
   } catch(e) { console.log('Supabase読み込みエラー:', e); return null; }
 }
