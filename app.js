@@ -124,6 +124,7 @@ async function sbSaveOrder(order) {
       saved_at: order.savedAt,
       nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
       nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
+      planned_staff: order.plannedStaff||'',
     });
     if (error) throw error;
     return true;
@@ -155,6 +156,7 @@ async function sbLoadOrders() {
       skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at,
       nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
       nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
+      plannedStaff: row.planned_staff || '',
     }));
   } catch(e) { console.log('Supabase読み込みエラー:', e); return null; }
 }
@@ -1065,7 +1067,7 @@ async function loadList() {
         </div>
       </div>
       <div class="order-info">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}　${o.carPlate?'【'+o.carPlate+'】':''}</div>
-      <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}</div>
+      <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}${o.plannedStaff?`　<span style="color:#ffaa30">予定：${o.plannedStaff}</span>`:''}</div>
       ${nyukoInfo?`<div class="order-info" style="color:#88aaff;font-size:12px">${nyukoInfo}</div>`:''}
       ${itemsPreview}
     </div>`;
@@ -1344,6 +1346,10 @@ function openEditModal(id) {
             <input id="edit-carPlate" value="${order.carPlate||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
           <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">入庫日</div>
+            <input id="edit-dateIn" type="date" value="${order.dateIn||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">出庫予定日</div>
             <input id="edit-dateOut" type="date" value="${order.dateOut||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
@@ -1356,6 +1362,10 @@ function openEditModal(id) {
             <select id="edit-status" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
               ${['入庫待ち','入庫中','作業中','完了','引渡済','車検中'].map(s=>`<option value="${s}" ${order.status===s?'selected':''}>${s}</option>`).join('')}
             </select>
+          </div>
+          <div style="grid-column:1/-1">
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">👷 担当予定者（任意）</div>
+            <input id="edit-plannedStaff" value="${order.plannedStaff||''}" placeholder="例：甲斐" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
         </div>
         <div style="margin-top:10px">
@@ -1666,10 +1676,12 @@ async function saveEdit() {
   order.custName  = document.getElementById('edit-custName')?.value.trim() || order.custName;
   order.carName   = document.getElementById('edit-carName')?.value.trim()  || order.carName;
   order.carPlate  = document.getElementById('edit-carPlate')?.value.trim() || order.carPlate;
+  order.dateIn    = document.getElementById('edit-dateIn')?.value           || order.dateIn;
   order.dateOut   = document.getElementById('edit-dateOut')?.value          || order.dateOut;
   order.mechName  = document.getElementById('edit-mechName')?.value.trim() || order.mechName;
   order.status    = document.getElementById('edit-status')?.value           || order.status;
   order.remarks   = document.getElementById('edit-remarks')?.value          || '';
+  order.plannedStaff = document.getElementById('edit-plannedStaff')?.value.trim() || '';
   order.nyukoMethod  = document.getElementById('edit-nyukoMethod')?.value  || '';
   order.nyukoTime    = document.getElementById('edit-nyukoTime')?.value     || '';
   order.nyukoPlace   = document.getElementById('edit-nyukoPlace')?.value.trim() || '';
