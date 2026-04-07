@@ -210,6 +210,28 @@
         <div><label>車検入庫日</label><input type="date" id="sk-dateIn"></div>
       </div>
       <div class="row2">
+        <div>
+          <label>入庫手段</label>
+          <select id="sk-nyukoMethod">
+            <option value="">未設定</option>
+            <option value="お客入庫">🚗 お客入庫</option>
+            <option value="引き取り">🔑 引き取り</option>
+            <option value="レッカー">🚨 レッカー</option>
+          </select>
+        </div>
+        <div><label>入庫予定時間</label><input type="time" id="sk-nyukoTime"></div>
+      </div>
+      <div class="row2">
+        <div>
+          <label>引き取り場所</label>
+          <div class="inp-wrap"><input id="sk-nyukoPlace" placeholder="例：高槻市〇〇町"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding-top:20px">
+          <label style="margin:0">🔴 部品待ち</label>
+          <input type="checkbox" id="sk-partsPending" style="width:22px;height:22px;cursor:pointer;accent-color:var(--danger)">
+        </div>
+      </div>
+      <div class="row2">
         <div><label>顧客名</label><input id="sk-custName" inputmode="text"></div>
         <div><label>ナンバー</label><input id="sk-carPlate" inputmode="text"></div>
       </div>
