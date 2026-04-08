@@ -1060,11 +1060,14 @@ async function loadList() {
     const itemsPreview = allItems.length ? `<div class="order-info" style="color:var(--accent);font-size:11px">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>` : '';
     const _now=new Date();const _jst=new Date(_now.getTime()+9*60*60*1000);const _today=_jst.toISOString().split('T')[0];
     const isToday = (o.dateIn||'')===_today;
-    return `<div class="order-item" onclick="showDetail('${o.id}')" style="${isToday?'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);':''}">
+    const isUntaken = isToday && !o.mechName;
+    const takeBtn = isUntaken ? `<button onclick="event.stopPropagation();takeOrder('${o.id}')" style="background:var(--accent);border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;flex-shrink:0">✋ やります</button>` : '';
+    return `<div class="order-item" onclick="showDetail('${o.id}')" style="${isUntaken?'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);':''}">
       <div class="top">
-        <span class="order-num">${isToday?'🔥 ':''}${o.orderNum||'（番号なし）'}</span>
+        <span class="order-num">${isUntaken?'🔥 ':''}${o.orderNum||'（番号なし）'}</span>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${partsBadge}
+          ${takeBtn}
           <span class="badge badge-${o.status}">${o.status}</span>
         </div>
       </div>
@@ -1074,6 +1077,20 @@ async function loadList() {
       ${itemsPreview}
     </div>`;
   }).join('');
+}
+
+// ─── 作業引き受け ────────────────────────────────────────────
+async function takeOrder(id) {
+  if(!currentUser) { showToast('ログインしてください','error'); return; }
+  if(!confirm(`「${currentUser.name}」がこの作業を引き受けますか？`)) return;
+  const order=S.orders.find(o=>o.id===id); if(!order) return;
+  order.mechName = currentUser.name;
+  order.mechId   = currentUser.id;
+  order.status   = order.status==='入庫待ち'||order.status==='入庫中' ? '作業中' : order.status;
+  saveState();
+  const ok = await sbSaveOrder(order);
+  showToast(ok?`✅ ${currentUser.name} が引き受けました`:'⚠️ 保存失敗', ok?'success':'error');
+  loadList();
 }
 
 // ─── 詳細表示 ────────────────────────────────────────────────
