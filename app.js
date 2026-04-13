@@ -1047,7 +1047,7 @@ async function loadList() {
     (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
     (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword));
   const _n=new Date();const _j=new Date(_n.getTime()+9*60*60*1000);const _td=_j.toISOString().split('T')[0];
-  const statusOrder={'作業中':0,'車検中':1,'入庫待ち':3,'完了':4,'引渡済':5};
+  const statusOrder={'作業中':0,'車検中':1,'入庫中':2,'入庫待ち':4,'完了':5,'引渡済':6};
   orders.sort((a,b)=>{
     const aStatus=a.status;const bStatus=b.status;
     // 入庫待ちの本日入庫分は優先度2（作業中・車検中の次）
