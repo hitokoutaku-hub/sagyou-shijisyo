@@ -124,7 +124,7 @@ async function sbSaveOrder(order) {
       saved_at: order.savedAt,
       nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
       nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
-      planned_staff: order.plannedStaff||'',
+      planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false,
     });
     if (error) throw error;
     return true;
@@ -156,7 +156,7 @@ async function sbLoadOrders() {
       skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at,
       nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
       nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
-      plannedStaff: row.planned_staff || '',
+      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false,
     }));
   } catch(e) { console.log('Supabase読み込みエラー:', e); return null; }
 }
@@ -1039,10 +1039,13 @@ async function loadList() {
   if(filterKeyword) orders=orders.filter(o=>
     (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
     (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword));
-  const statusOrder={'作業中':0,'車検中':1,'入庫中':2,'入庫待ち':3,'完了':4,'引渡済':5};
+  const _n=new Date();const _j=new Date(_n.getTime()+9*60*60*1000);const _td=_j.toISOString().split('T')[0];
+  const statusOrder={'作業中':0,'車検中':1,'入庫待ち':3,'完了':4,'引渡済':5};
   orders.sort((a,b)=>{
-    const aO=statusOrder[a.status]??99;
-    const bO=statusOrder[b.status]??99;
+    const aStatus=a.status;const bStatus=b.status;
+    // 入庫待ちの本日入庫分は優先度2（作業中・車検中の次）
+    const aO=aStatus==='入庫待ち'&&(a.dateIn||'')===_td?2:(statusOrder[aStatus]??99);
+    const bO=bStatus==='入庫待ち'&&(b.dateIn||'')===_td?2:(statusOrder[bStatus]??99);
     if(aO!==bO)return aO-bO;
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
@@ -1062,11 +1065,13 @@ async function loadList() {
     const isToday = (o.dateIn||'')===_today;
     const isUntaken = isToday && !o.mechName;
     const takeBtn = isUntaken ? `<button onclick="event.stopPropagation();takeOrder('${o.id}')" style="background:var(--accent);border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;flex-shrink:0">✋ やります</button>` : '';
+    const invoiceBadge = o.invoiceDone ? `<span style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📄 請求書済</span>` : '';
     return `<div class="order-item" onclick="showDetail('${o.id}')" style="${isUntaken?'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);':''}">
       <div class="top">
         <span class="order-num">${isUntaken?'🔥 ':''}${o.orderNum||'（番号なし）'}</span>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${partsBadge}
+          ${invoiceBadge}
           ${takeBtn}
           <span class="badge badge-${o.status}">${o.status}</span>
         </div>
@@ -1413,6 +1418,10 @@ function openEditModal(id) {
             <div style="font-size:13px;font-weight:700;color:#ff7070">🔴 部品待ち</div>
             <input type="checkbox" id="edit-partsPending" ${order.partsPending?'checked':''} style="width:22px;height:22px;cursor:pointer;accent-color:var(--danger)">
           </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <div style="font-size:13px;font-weight:700;color:#40d070">📄 請求書作成済み</div>
+            <input type="checkbox" id="edit-invoiceDone" ${order.invoiceDone?'checked':''} style="width:22px;height:22px;cursor:pointer;accent-color:#40d070">
+          </div>
         </div>
       </div>
 
@@ -1705,6 +1714,7 @@ async function saveEdit() {
   order.nyukoTime    = document.getElementById('edit-nyukoTime')?.value     || '';
   order.nyukoPlace   = document.getElementById('edit-nyukoPlace')?.value.trim() || '';
   order.partsPending = document.getElementById('edit-partsPending')?.checked || false;
+  order.invoiceDone  = document.getElementById('edit-invoiceDone')?.checked  || false;
 
   if (order.type === 'repair') {
     order.repairType    = editRepairType;
