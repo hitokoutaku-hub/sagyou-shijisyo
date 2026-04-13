@@ -128,6 +128,7 @@ const DEF_SK_TRUCK = [
   {label:'クラッチブースター',         req:false, opts:'交換/要観察/良好'},
   {label:'スタビライザーブッシュ',     req:false, opts:'交換/要観察/良好'},
   {label:'エアサスベローズ',           req:false, opts:'交換/要観察/良好'},
+  {label:'ブレーキ種別',               req:false, opts:'フロントのみディスク/総輪ディスク/エアーブレーキ/総輪ライニング'},
   {label:'ディスクパット（フロント）', req:false, opts:'交換/要観察/良好'},
   {label:'ディスクパット（リア）',     req:false, opts:'交換/要観察/良好'},
   {label:'ライニング（フロント）',     req:false, opts:'交換/要観察/良好'},
