@@ -1050,9 +1050,8 @@ async function loadList() {
   const statusOrder={'作業中':0,'車検中':1,'入庫中':2,'入庫待ち':4,'完了':5,'引渡済':6};
   orders.sort((a,b)=>{
     const aStatus=a.status;const bStatus=b.status;
-    // 入庫待ちの本日入庫分は優先度2（作業中・車検中の次）
-    const aO=aStatus==='入庫待ち'&&(a.dateIn||'')===_td?2:(statusOrder[aStatus]??99);
-    const bO=bStatus==='入庫待ち'&&(b.dateIn||'')===_td?2:(statusOrder[bStatus]??99);
+    const aO=aStatus==='入庫待ち'&&(a.dateIn||'')===_td?3:(statusOrder[aStatus]??99);
+    const bO=bStatus==='入庫待ち'&&(b.dateIn||'')===_td?3:(statusOrder[bStatus]??99);
     if(aO!==bO)return aO-bO;
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
