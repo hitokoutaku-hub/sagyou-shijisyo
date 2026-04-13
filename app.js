@@ -1022,7 +1022,6 @@ function updateMonthFilter() {
     sel.value=current;
   }
 }
-}
 
 function clearFilter() {
   document.getElementById('filterStatus').value='';
