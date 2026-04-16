@@ -1047,12 +1047,19 @@ async function loadList() {
     (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
     (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword));
   const _n=new Date();const _j=new Date(_n.getTime()+9*60*60*1000);const _td=_j.toISOString().split('T')[0];
-  const statusOrder={'作業中':0,'車検中':1,'入庫中':2,'入庫待ち':4,'完了':5,'引渡済':6};
+  const _tmD=new Date(_j);_tmD.setDate(_tmD.getDate()+1);const _tm=_tmD.toISOString().split('T')[0];
+  const statusOrder={'作業中':0,'車検中':1,'入庫中':2,'完了':5,'引渡済':6};
+  function nyukoOrder(o){
+    if(o.status!=='入庫待ち')return statusOrder[o.status]??99;
+    const d=o.dateIn||'';
+    if(d===_td)return 3;
+    if(d===_tm)return 3.5;
+    return 3.8;
+  }
   orders.sort((a,b)=>{
-    const aStatus=a.status;const bStatus=b.status;
-    const aO=aStatus==='入庫待ち'&&(a.dateIn||'')===_td?3:(statusOrder[aStatus]??99);
-    const bO=bStatus==='入庫待ち'&&(b.dateIn||'')===_td?3:(statusOrder[bStatus]??99);
+    const aO=nyukoOrder(a);const bO=nyukoOrder(b);
     if(aO!==bO)return aO-bO;
+    if(a.status==='入庫待ち'&&b.status==='入庫待ち')return (a.dateIn||'').localeCompare(b.dateIn||'');
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const el=document.getElementById('listSyncLabel'); if(el) el.textContent=sbReady?'クラウド同期済み':'ローカル保存';
