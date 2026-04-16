@@ -1068,13 +1068,18 @@ async function loadList() {
     const allItems=[...(o.carItems||[]),...(o.truckItems||[]),...(o.airconItems||[]),...(o.skResults?Object.keys(o.skResults).filter(k=>o.skResults[k]):[])].slice(0,3);
     const itemsPreview = allItems.length ? `<div class="order-info" style="color:var(--accent);font-size:11px">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>` : '';
     const _now=new Date();const _jst=new Date(_now.getTime()+9*60*60*1000);const _today=_jst.toISOString().split('T')[0];
+    const _tomorrowD=new Date(_jst);_tomorrowD.setDate(_tomorrowD.getDate()+1);const _tomorrow=_tomorrowD.toISOString().split('T')[0];
     const isToday = (o.dateIn||'')===_today;
+    const isTomorrow = (o.dateIn||'')===_tomorrow;
+    const isPast = (o.dateIn||'')!=='' && (o.dateIn||'')<_today && o.status!=='完了' && o.status!=='引渡済';
     const isUntaken = isToday && !o.mechName;
     const takeBtn = isUntaken ? `<button onclick="event.stopPropagation();takeOrder('${o.id}')" style="background:var(--accent);border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;flex-shrink:0">✋ やります</button>` : '';
     const invoiceBadge = o.invoiceDone ? `<span style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📄 請求書済</span>` : '';
-    return `<div class="order-item" onclick="showDetail('${o.id}')" style="${isUntaken?'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);':''}">
+    const rowStyle = isPast ? 'border-left:4px solid #cc4444;background:rgba(200,60,60,0.08);' : isToday ? 'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);' : isTomorrow ? 'border-left:4px solid #4488ff;background:rgba(68,136,255,0.08);' : '';
+    const prefix = isPast ? '⚠️ ' : isToday ? '🔥 ' : isTomorrow ? '🔔 ' : '';
+    return `<div class="order-item" onclick="showDetail('${o.id}')" style="${rowStyle}">
       <div class="top">
-        <span class="order-num">${isUntaken?'🔥 ':''}${o.orderNum||'（番号なし）'}</span>
+        <span class="order-num">${prefix}${o.orderNum||'（番号なし）'}</span>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${partsBadge}
           ${invoiceBadge}
