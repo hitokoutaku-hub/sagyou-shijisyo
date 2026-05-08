@@ -1310,10 +1310,42 @@ function addPhotoToOrder(orderId,containerId,type) {
     const container=document.getElementById(containerId);
     Array.from(input.files).forEach(file=>{
       _compressAndRun(file,async compressed=>{
-        const div=document.createElement('div'); div.style.cssText='background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px';
-        div.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px">${type}</div><img src="${compressed}" style="width:100%;border-radius:6px"><div style="color:var(--sub);font-size:10px;margin-top:3px;text-align:center">保存中...</div>`;
+        const slotId='view-slot-'+(++photoCounter);
+        const div=document.createElement('div');
+        div.id=slotId;
+        div.style.cssText='background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px';
+        div.innerHTML=`
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span style="font-size:11px;font-weight:700;color:var(--accent)">${type}</span>
+            <span style="margin-left:auto;font-size:10px;color:var(--sub)" id="${slotId}-status">保存中...</span>
+          </div>
+          <img src="${compressed}" style="width:100%;border-radius:6px;cursor:zoom-in" onclick="openPhotoFullscreen('${compressed}','${type}')">`;
         if(container) container.appendChild(div);
-        if(sb){try{const{error}=await sb.from(DB_TABLES.PHOTOS).insert([{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}]);if(!error){const s=div.querySelector('div:last-child');if(s)s.textContent='保存完了';}}catch(e){}}
+        if(sb){
+          try{
+            const{data,error}=await sb.from(DB_TABLES.PHOTOS).insert([{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}]).select();
+            const st=document.getElementById(slotId+'-status');
+            if(error){ if(st)st.textContent='保存失敗'; return; }
+            // IDが取れた場合はそれを使い、取れなくても保存完了としてゴミ箱を表示
+            const newId=data&&data[0]?data[0].id:null;
+            const headerDiv=div.querySelector('div:first-child');
+            if(headerDiv){
+              if(st)st.remove();
+              const delBtn=document.createElement('button');
+              delBtn.innerHTML='🗑️';
+              delBtn.style.cssText='background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:16px;padding:6px 12px;cursor:pointer;margin-left:auto;min-width:40px;min-height:36px';
+              delBtn.onclick=()=>{
+                if(newId){ deletePhoto(newId,slotId); }
+                else {
+                  // IDがない場合はDBから最新のものを検索して削除
+                  if(sb){ sb.from(DB_TABLES.PHOTOS).select('id').eq('kiroku_id',orderId).eq('photo_type',type).order('created_at',{ascending:false}).limit(1).then(({data:d})=>{ if(d&&d[0]) deletePhoto(d[0].id,slotId); else { document.getElementById(slotId)?.remove(); } }); }
+                  else { document.getElementById(slotId)?.remove(); }
+                }
+              };
+              headerDiv.appendChild(delBtn);
+            }
+          }catch(e){const st=document.getElementById(slotId+'-status');if(st)st.textContent='エラー';}
+        }
       });
     });
     input.remove();
@@ -2048,50 +2080,4 @@ async function renderOwnerPanel() {
       <div style="display:flex;flex-direction:column;gap:6px">
         ${loginLogs.map(log=>`
           <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
-            <span style="font-size:18px">${log.action==='login'?'🔓':'🔒'}</span>
-            <div style="flex:1">
-              <div style="font-size:14px;font-weight:700">${log.staff_name}</div>
-              <div style="font-size:11px;color:var(--sub)">${log.action==='login'?'ログイン':'ログアウト'}</div>
-            </div>
-            <div style="font-size:11px;color:var(--sub)">${new Date(log.logged_at).toLocaleString('ja-JP')}</div>
-          </div>`).join('')}
-        ${loginLogs.length===0?'<div style="text-align:center;color:var(--sub);padding:20px">履歴がありません</div>':''}
-      </div>
-    </div>`;
-}
-
-function clearOwnerFilter() {
-  const from = document.getElementById('ownerFromDate');
-  const to   = document.getElementById('ownerToDate');
-  if(from) from.value = '';
-  if(to)   to.value   = '';
-  renderOwnerPanel();
-}
-
-// ─── 初期化 ───────────────────────────────────────────────────
-function initApp() {
-  document.title = COMPANY.title + '｜' + COMPANY.name;
-  const h1=document.querySelector('.header h1'); if(h1) h1.textContent='🔧 '+COMPANY.title;
-
-  loadState();
-  updateSyncUI();
-  updateNumDisplay();
-  renderAllChecklists();
-  renderCarRepairItems();
-  renderInsuranceSelect();
-
-  renderMechSelect('mechSelectRepair');
-  renderMechSelect('mechSelectShakken');
-  renderMechSelect('mechSelectAccident');
-
-  renderSubStaffArea();
-
-  setTimeout(()=>loadMasters(), 500);
-
-  const today=new Date().toISOString().split('T')[0];
-  ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
-}
-
-// ─── 起動 ─────────────────────────────────────────────────────
-initSupabase();
-initAuth();
+            <span style="font-size:18px">${log.action==='
