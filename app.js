@@ -185,19 +185,67 @@ async function loadPhotosForOrder(orderId) {
 function _compressAndRun(file, callback) {
   const reader = new FileReader();
   reader.onload = e => {
+    const arrayBuf = e.target.result;
+    // EXIF orientation 取得
+    let orientation = 1;
+    try {
+      const view = new DataView(arrayBuf);
+      if (view.getUint16(0, false) === 0xFFD8) {
+        let offset = 2;
+        while (offset < view.byteLength) {
+          const marker = view.getUint16(offset, false);
+          offset += 2;
+          if (marker === 0xFFE1) {
+            if (view.getUint32(offset + 2, false) === 0x45786966) {
+              const little = view.getUint16(offset + 8, false) === 0x4949;
+              const ifdOffset = view.getUint32(offset + 14, little);
+              const entries = view.getUint16(offset + 8 + ifdOffset, little);
+              for (let i = 0; i < entries; i++) {
+                if (view.getUint16(offset + 8 + ifdOffset + 2 + i * 12, little) === 0x0112) {
+                  orientation = view.getUint16(offset + 8 + ifdOffset + 2 + i * 12 + 8, little);
+                  break;
+                }
+              }
+            }
+            break;
+          }
+          offset += view.getUint16(offset, false);
+        }
+      }
+    } catch(ex) { orientation = 1; }
+
+    const blob = new Blob([arrayBuf], { type: file.type });
+    const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      const canvas = document.createElement('canvas');
       const maxW = 1200;
       let w = img.width, h = img.height;
-      if (w > maxW) { h = h * maxW / w; w = maxW; }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      // orientation に応じて縦横を入れ替え
+      const swap = orientation >= 5 && orientation <= 8;
+      let dw = swap ? h : w;
+      let dh = swap ? w : h;
+      if (dw > maxW) { dh = dh * maxW / dw; dw = maxW; }
+      const canvas = document.createElement('canvas');
+      canvas.width = dw; canvas.height = dh;
+      const ctx = canvas.getContext('2d');
+      // 回転・反転を適用
+      switch (orientation) {
+        case 2: ctx.transform(-1,0,0,1,dw,0); break;
+        case 3: ctx.transform(-1,0,0,-1,dw,dh); break;
+        case 4: ctx.transform(1,0,0,-1,0,dh); break;
+        case 5: ctx.transform(0,1,1,0,0,0); break;
+        case 6: ctx.transform(0,1,-1,0,dh,0); break;
+        case 7: ctx.transform(0,-1,-1,0,dh,dw); break;
+        case 8: ctx.transform(0,-1,1,0,0,dw); break;
+      }
+      if (swap) ctx.drawImage(img, 0, 0, h, w);
+      else ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
       callback(canvas.toDataURL('image/jpeg', 0.7));
     };
-    img.src = e.target.result;
+    img.src = url;
   };
-  reader.readAsDataURL(file);
+  reader.readAsArrayBuffer(file);
 }
 
 function addPhotoSlot(containerId, type) {
@@ -1275,14 +1323,63 @@ function sendLineReport(orderId) {
 
 function closeShijishoView() { document.getElementById('shijishoView')?.remove(); }
 
-// ─── 写真全画面表示 ───────────────────────────────────────────
+// ─── 写真全画面表示（スワイプ・スクロール対応） ─────────────
+window._photoViewerList = [];
+window._photoViewerIdx  = 0;
+
 function openPhotoFullscreen(src, type) {
+  // 現在表示中の指示書内の全写真を収集してスワイプ可能に
+  const allImgs = Array.from(document.querySelectorAll('img[onclick*="openPhotoFullscreen"]'));
+  if (allImgs.length > 0) {
+    window._photoViewerList = allImgs.map(img => {
+      const m = img.getAttribute('onclick').match(/openPhotoFullscreen\('([^']+)','([^']+)'\)/);
+      return m ? { src: m[1], type: m[2] } : { src: img.src, type: '' };
+    });
+    window._photoViewerIdx = window._photoViewerList.findIndex(p => p.src === src);
+    if (window._photoViewerIdx < 0) window._photoViewerIdx = 0;
+  } else {
+    window._photoViewerList = [{ src, type }];
+    window._photoViewerIdx  = 0;
+  }
+  _renderPhotoViewer();
+}
+
+function _renderPhotoViewer() {
+  document.getElementById('photoFullscreen')?.remove();
+  const list  = window._photoViewerList;
+  const idx   = window._photoViewerIdx;
+  const item  = list[idx];
+  const total = list.length;
   document.body.insertAdjacentHTML('beforeend', `
-  <div id="photoFullscreen" onclick="closePhotoFullscreen()"
-    style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out">
-    <div style="color:#fff;font-size:13px;font-weight:700;margin-bottom:12px;opacity:0.8">${type} — タップして閉じる</div>
-    <img src="${src}" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
+  <div id="photoFullscreen" style="position:fixed;inset:0;background:rgba(0,0,0,0.97);z-index:1000;display:flex;flex-direction:column;touch-action:pan-y">
+    <!-- ヘッダー -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;flex-shrink:0">
+      <div style="color:#fff;font-size:13px;font-weight:700;opacity:0.85">${item.type}</div>
+      <div style="color:#aaa;font-size:12px">${idx+1} / ${total}</div>
+      <button onclick="closePhotoFullscreen()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:18px;border-radius:50%;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <!-- 写真（縦スクロール可） -->
+    <div style="flex:1;overflow-y:auto;overflow-x:hidden;display:flex;align-items:flex-start;justify-content:center;padding:0 8px 20px">
+      <img src="${item.src}" style="width:100%;height:auto;border-radius:8px;display:block">
+    </div>
+    <!-- 前後ナビ -->
+    ${total > 1 ? `
+    <div style="display:flex;gap:12px;padding:12px 16px;flex-shrink:0">
+      <button onclick="_photoViewerPrev()" ${idx===0?'disabled':''} style="flex:1;padding:12px;background:rgba(255,255,255,${idx===0?'0.1':'0.2'});border:none;color:#fff;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;opacity:${idx===0?'0.4':'1'}">‹ 前の写真</button>
+      <button onclick="_photoViewerNext()" ${idx===total-1?'disabled':''} style="flex:1;padding:12px;background:rgba(255,255,255,${idx===total-1?'0.1':'0.2'});border:none;color:#fff;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;opacity:${idx===total-1?'0.4':'1'}">次の写真 ›</button>
+    </div>` : `<div style="padding:12px 16px;text-align:center;color:rgba(255,255,255,0.4);font-size:12px">タップして閉じる以外は画面外をタップ</div>`}
   </div>`);
+  // 背景タップで閉じる（ボタン以外）
+  document.getElementById('photoFullscreen').addEventListener('click', e => {
+    if (e.target === document.getElementById('photoFullscreen')) closePhotoFullscreen();
+  });
+}
+
+function _photoViewerPrev() {
+  if (window._photoViewerIdx > 0) { window._photoViewerIdx--; _renderPhotoViewer(); }
+}
+function _photoViewerNext() {
+  if (window._photoViewerIdx < window._photoViewerList.length - 1) { window._photoViewerIdx++; _renderPhotoViewer(); }
 }
 
 function closePhotoFullscreen() {
