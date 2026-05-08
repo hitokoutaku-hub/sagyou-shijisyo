@@ -1,38 +1,15 @@
 /**
  * ============================================================
- *  auth.js — ログイン・権限管理
+ *  auth.js — ログイン・権限管理（オフライン対応版）
  * ============================================================
- *  ・スタッフ一覧をSupabaseから取得してログイン画面に表示
- *  ・PINコード認証
- *  ・ログイン履歴をSupabaseに記録
- *  ・currentUser をグローバルで管理
- * ============================================================
- *
- *  【Supabaseテーブル: sagyou_staff】
- *  id         text primary key
- *  name       text
- *  pin        text
- *  is_owner   boolean default false
- *  created_at timestamp
- *
- *  【初期データ投入SQL】
- *  INSERT INTO sagyou_staff (id, name, pin, is_owner)
- *  VALUES ('staff_owner', 'オーナー', '0000', true);
- *
- *  【Supabaseテーブル: sagyou_logs】
- *  id         uuid default gen_random_uuid()
- *  staff_id   text
- *  staff_name text
- *  action     text  ('login' / 'logout')
- *  logged_at  timestamp default now()
  */
 
-let currentUser = null; // { id, name, is_owner }
-let staffList   = [];   // ログイン画面に表示するスタッフ一覧
+let currentUser = null;
+let staffList   = [];
 
 // ─── ログイン画面初期化 ───────────────────────────────────────
 async function initAuth() {
-  // セッション復元（ページリロード時）
+  // セッション復元（ページリロード時）→ Supabase不要でそのまま入れる
   const saved = sessionStorage.getItem('wc_current_user');
   if (saved) {
     try {
@@ -41,6 +18,14 @@ async function initAuth() {
       return;
     } catch(e) { sessionStorage.removeItem('wc_current_user'); }
   }
+
+  // ローカルキャッシュからスタッフ一覧を復元
+  const cachedStaff = localStorage.getItem('wc_staff_cache');
+  if (cachedStaff) {
+    try { staffList = JSON.parse(cachedStaff); } catch(e) { staffList = []; }
+  }
+
+  // Supabaseからスタッフ一覧取得（失敗してもキャッシュで続行）
   await loadStaffForLogin();
   renderLoginScreen();
 }
@@ -51,13 +36,15 @@ async function loadStaffForLogin() {
   try {
     const { data, error } = await sb
       .from(DB_TABLES.STAFF)
-      .select('id, name, is_owner')
+      .select('id, name, is_owner, pin')
       .order('is_owner', { ascending: false });
     if (error) throw error;
     staffList = data || [];
+    // ローカルにキャッシュ保存（PIN含む）
+    localStorage.setItem('wc_staff_cache', JSON.stringify(staffList));
   } catch(e) {
-    console.log('スタッフ取得エラー:', e);
-    staffList = [];
+    console.log('スタッフ取得エラー（オフラインモード）:', e);
+    // キャッシュがあればそのまま使う（staffListは既にセット済み）
   }
 }
 
@@ -69,17 +56,16 @@ function renderLoginScreen() {
   const screen = document.getElementById('loginScreen');
   if (!screen) return;
 
+  const isOffline = !sbReady;
+
   if (!staffList.length) {
-    // スタッフ未登録時（初回セットアップ）
     screen.innerHTML = `
       <div class="login-box">
         <div class="login-logo">🔧</div>
         <div class="login-title">${COMPANY.title}</div>
         <div class="login-sub">${COMPANY.name}</div>
         <div style="background:#2e0d0d;border:1px solid var(--danger);border-radius:10px;padding:16px;color:#ff7070;font-size:13px;text-align:center;line-height:1.8">
-          スタッフが登録されていません。<br>
-          Supabaseの <strong>sagyou_staff</strong> テーブルに<br>
-          オーナーアカウントを追加してください。
+          ${isOffline ? 'サーバーに接続できません。<br>ネットワークを確認して再読み込みしてください。' : 'スタッフが登録されていません。<br>Supabaseの <strong>sagyou_staff</strong> テーブルに<br>オーナーアカウントを追加してください。'}
         </div>
         <button class="login-btn" style="margin-top:16px" onclick="location.reload()">🔄 再読み込み</button>
       </div>`;
@@ -98,6 +84,7 @@ function renderLoginScreen() {
       <div class="login-logo">🔧</div>
       <div class="login-title">${COMPANY.title}</div>
       <div class="login-sub">${COMPANY.name}</div>
+      ${isOffline ? `<div style="background:#2a2200;border:1px solid #a08030;border-radius:8px;padding:8px 12px;color:#d0b040;font-size:12px;text-align:center;margin-bottom:12px">⚠️ オフラインモード（キャッシュでログイン）</div>` : ''}
       <div id="loginStep1">
         <div style="color:var(--sub);font-size:12px;font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">ユーザーを選択</div>
         <div class="login-user-list">${userBtns}</div>
@@ -124,7 +111,6 @@ function renderLoginScreen() {
       </div>
     </div>`;
 
-  // PINドットのスタイル
   const style = document.createElement('style');
   style.textContent = `
     .pin-dot { width:14px;height:14px;border-radius:50%;background:var(--border);transition:.15s; }
@@ -178,7 +164,27 @@ async function attemptLogin() {
   const errEl = document.getElementById('loginError');
   errEl.textContent = '';
 
-  // Supabaseで認証
+  // まずキャッシュからPIN照合（オフライン対応）
+  const cached = staffList.find(s => s.id === selectedStaff.id);
+  if (cached && cached.pin) {
+    if (cached.pin !== pinInput) {
+      errEl.textContent = 'PINコードが違います';
+      pinInput = '';
+      updatePinDisplay();
+      return;
+    }
+    // PINが一致 → ログイン成功
+    currentUser = { id: cached.id, name: cached.name, is_owner: cached.is_owner };
+    sessionStorage.setItem('wc_current_user', JSON.stringify(currentUser));
+    // オンラインならログ記録（失敗しても続行）
+    if (sbReady) {
+      try { await recordLog('login'); } catch(e) {}
+    }
+    onLoginSuccess();
+    return;
+  }
+
+  // キャッシュにPINがない場合はSupabaseで照合
   try {
     const { data, error } = await sb
       .from(DB_TABLES.STAFF)
@@ -194,11 +200,14 @@ async function attemptLogin() {
     }
     currentUser = { id: data.id, name: data.name, is_owner: data.is_owner };
     sessionStorage.setItem('wc_current_user', JSON.stringify(currentUser));
-    // ログイン履歴を記録
+    // キャッシュ更新
+    const idx = staffList.findIndex(s => s.id === data.id);
+    if (idx >= 0) staffList[idx] = data;
+    localStorage.setItem('wc_staff_cache', JSON.stringify(staffList));
     await recordLog('login');
     onLoginSuccess();
   } catch(e) {
-    errEl.textContent = '認証エラーが発生しました';
+    errEl.textContent = 'サーバーに接続できません。再試行してください。';
     pinInput = '';
     updatePinDisplay();
   }
@@ -223,25 +232,24 @@ function onLoginSuccess() {
   if (currentUser.is_owner) {
     document.getElementById('app').classList.add('is-owner');
   }
-  // ヘッダーのユーザーバッジを更新
   const badge = document.getElementById('currentUserBadge');
   if (badge) {
     badge.textContent = (currentUser.is_owner ? '👑 ' : '👤 ') + currentUser.name;
     if (currentUser.is_owner) badge.classList.add('owner');
   }
-  // オーナー専用タブの表示
   const ownerTab = document.getElementById('ownerTab');
   if (ownerTab && currentUser.is_owner) {
     ownerTab.style.display = 'block';
   }
-  // アプリ初期化
   initApp();
 }
 
 // ─── ログアウト ───────────────────────────────────────────────
 async function logout() {
   if (!confirm('ログアウトしますか？')) return;
-  await recordLog('logout');
+  if (sbReady) {
+    try { await recordLog('logout'); } catch(e) {}
+  }
   currentUser = null;
   sessionStorage.removeItem('wc_current_user');
   selectedStaff = null;
