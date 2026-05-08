@@ -183,81 +183,21 @@ async function loadPhotosForOrder(orderId) {
 }
 
 function _compressAndRun(file, callback) {
-  // まず DataURL で読み込んでEXIF取得 → canvas で正しい向きに描画
-  const fr1 = new FileReader();
-  fr1.onload = e1 => {
-    // EXIF orientation 取得
-    let orientation = 1;
-    try {
-      const fr2 = new FileReader();
-      fr2.onloadend = () => {
-        try {
-          const buf = fr2.result;
-          const view = new DataView(buf);
-          if (view.getUint16(0, false) === 0xFFD8) {
-            let off = 2;
-            while (off < view.byteLength) {
-              const marker = view.getUint16(off, false); off += 2;
-              if (marker === 0xFFE1) {
-                if (view.getUint32(off + 2, false) === 0x45786966) {
-                  const le = view.getUint16(off + 8, false) === 0x4949;
-                  const ifd = view.getUint32(off + 14, le);
-                  const n = view.getUint16(off + 8 + ifd, le);
-                  for (let i = 0; i < n; i++) {
-                    if (view.getUint16(off + 8 + ifd + 2 + i * 12, le) === 0x0112) {
-                      orientation = view.getUint16(off + 8 + ifd + 2 + i * 12 + 8, le);
-                      break;
-                    }
-                  }
-                }
-                break;
-              }
-              if (off + view.getUint16(off, false) > view.byteLength) break;
-              off += view.getUint16(off, false);
-            }
-          }
-        } catch(ex) { orientation = 1; }
-        _drawCompressed(e1.target.result, orientation, callback);
-      };
-      fr2.readAsArrayBuffer(file);
-    } catch(ex) { _drawCompressed(e1.target.result, 1, callback); }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxW = 1200;
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = h * maxW / w; w = maxW; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.src = e.target.result;
   };
-  fr1.readAsDataURL(file);
-}
-
-function _drawCompressed(dataUrl, orientation, callback) {
-  const img = new Image();
-  img.onload = () => {
-    const maxSize = 1200;
-    const sw = img.width, sh = img.height; // 元のサイズ
-    const swap = orientation >= 5 && orientation <= 8;
-    // 出力サイズ（swapなら縦横入れ替え）
-    let ow = swap ? sh : sw;
-    let oh = swap ? sw : sh;
-    // maxSize に収める
-    if (ow > maxSize) { oh = Math.round(oh * maxSize / ow); ow = maxSize; }
-    const canvas = document.createElement('canvas');
-    canvas.width = ow; canvas.height = oh;
-    const ctx = canvas.getContext('2d');
-    ctx.save();
-    // 中心を原点にして回転・反転
-    ctx.translate(ow / 2, oh / 2);
-    switch (orientation) {
-      case 2: ctx.scale(-1, 1); break;
-      case 3: ctx.rotate(Math.PI); break;
-      case 4: ctx.scale(1, -1); break;
-      case 5: ctx.rotate(-Math.PI / 2); ctx.scale(-1, 1); break;
-      case 6: ctx.rotate(Math.PI / 2); break;
-      case 7: ctx.rotate(Math.PI / 2); ctx.scale(-1, 1); break;
-      case 8: ctx.rotate(-Math.PI / 2); break;
-    }
-    // swapのときは元の縦横で描画（中心基準なので -sw/2, -sh/2 から）
-    if (swap) ctx.drawImage(img, -sh / 2 * (ow / sh), -sw / 2 * (oh / sw), sh * (ow / sh), sw * (oh / sw));
-    else ctx.drawImage(img, -ow / 2, -oh / 2, ow, oh);
-    ctx.restore();
-    callback(canvas.toDataURL('image/jpeg', 0.7));
-  };
-  img.src = dataUrl;
+  reader.readAsDataURL(file);
 }
 
 function addPhotoSlot(containerId, type) {
@@ -1310,42 +1250,10 @@ function addPhotoToOrder(orderId,containerId,type) {
     const container=document.getElementById(containerId);
     Array.from(input.files).forEach(file=>{
       _compressAndRun(file,async compressed=>{
-        const slotId='view-slot-'+(++photoCounter);
-        const div=document.createElement('div');
-        div.id=slotId;
-        div.style.cssText='background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px';
-        div.innerHTML=`
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span style="font-size:11px;font-weight:700;color:var(--accent)">${type}</span>
-            <span style="margin-left:auto;font-size:10px;color:var(--sub)" id="${slotId}-status">保存中...</span>
-          </div>
-          <img src="${compressed}" style="width:100%;border-radius:6px;cursor:zoom-in" onclick="openPhotoFullscreen('${compressed}','${type}')">`;
+        const div=document.createElement('div'); div.style.cssText='background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px';
+        div.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px">${type}</div><img src="${compressed}" style="width:100%;border-radius:6px"><div style="color:var(--sub);font-size:10px;margin-top:3px;text-align:center">保存中...</div>`;
         if(container) container.appendChild(div);
-        if(sb){
-          try{
-            const{data,error}=await sb.from(DB_TABLES.PHOTOS).insert([{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}]).select();
-            const st=document.getElementById(slotId+'-status');
-            if(error){ if(st)st.textContent='保存失敗'; return; }
-            // IDが取れた場合はそれを使い、取れなくても保存完了としてゴミ箱を表示
-            const newId=data&&data[0]?data[0].id:null;
-            const headerDiv=div.querySelector('div:first-child');
-            if(headerDiv){
-              if(st)st.remove();
-              const delBtn=document.createElement('button');
-              delBtn.innerHTML='🗑️';
-              delBtn.style.cssText='background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:16px;padding:6px 12px;cursor:pointer;margin-left:auto;min-width:40px;min-height:36px';
-              delBtn.onclick=()=>{
-                if(newId){ deletePhoto(newId,slotId); }
-                else {
-                  // IDがない場合はDBから最新のものを検索して削除
-                  if(sb){ sb.from(DB_TABLES.PHOTOS).select('id').eq('kiroku_id',orderId).eq('photo_type',type).order('created_at',{ascending:false}).limit(1).then(({data:d})=>{ if(d&&d[0]) deletePhoto(d[0].id,slotId); else { document.getElementById(slotId)?.remove(); } }); }
-                  else { document.getElementById(slotId)?.remove(); }
-                }
-              };
-              headerDiv.appendChild(delBtn);
-            }
-          }catch(e){const st=document.getElementById(slotId+'-status');if(st)st.textContent='エラー';}
-        }
+        if(sb){try{const{error}=await sb.from(DB_TABLES.PHOTOS).insert([{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}]);if(!error){const s=div.querySelector('div:last-child');if(s)s.textContent='保存完了';}}catch(e){}}
       });
     });
     input.remove();
@@ -1367,63 +1275,14 @@ function sendLineReport(orderId) {
 
 function closeShijishoView() { document.getElementById('shijishoView')?.remove(); }
 
-// ─── 写真全画面表示（スワイプ・スクロール対応） ─────────────
-window._photoViewerList = [];
-window._photoViewerIdx  = 0;
-
+// ─── 写真全画面表示 ───────────────────────────────────────────
 function openPhotoFullscreen(src, type) {
-  // 現在表示中の指示書内の全写真を収集してスワイプ可能に
-  const allImgs = Array.from(document.querySelectorAll('img[onclick*="openPhotoFullscreen"]'));
-  if (allImgs.length > 0) {
-    window._photoViewerList = allImgs.map(img => {
-      const m = img.getAttribute('onclick').match(/openPhotoFullscreen\('([^']+)','([^']+)'\)/);
-      return m ? { src: m[1], type: m[2] } : { src: img.src, type: '' };
-    });
-    window._photoViewerIdx = window._photoViewerList.findIndex(p => p.src === src);
-    if (window._photoViewerIdx < 0) window._photoViewerIdx = 0;
-  } else {
-    window._photoViewerList = [{ src, type }];
-    window._photoViewerIdx  = 0;
-  }
-  _renderPhotoViewer();
-}
-
-function _renderPhotoViewer() {
-  document.getElementById('photoFullscreen')?.remove();
-  const list  = window._photoViewerList;
-  const idx   = window._photoViewerIdx;
-  const item  = list[idx];
-  const total = list.length;
   document.body.insertAdjacentHTML('beforeend', `
-  <div id="photoFullscreen" style="position:fixed;inset:0;background:rgba(0,0,0,0.97);z-index:1000;display:flex;flex-direction:column;touch-action:pan-y">
-    <!-- ヘッダー -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;flex-shrink:0">
-      <div style="color:#fff;font-size:13px;font-weight:700;opacity:0.85">${item.type}</div>
-      <div style="color:#aaa;font-size:12px">${idx+1} / ${total}</div>
-      <button onclick="closePhotoFullscreen()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:18px;border-radius:50%;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
-    </div>
-    <!-- 写真（縦スクロール可） -->
-    <div style="flex:1;overflow-y:auto;overflow-x:hidden;display:flex;align-items:flex-start;justify-content:center;padding:0 8px 20px">
-      <img src="${item.src}" style="width:100%;height:auto;border-radius:8px;display:block">
-    </div>
-    <!-- 前後ナビ -->
-    ${total > 1 ? `
-    <div style="display:flex;gap:12px;padding:12px 16px;flex-shrink:0">
-      <button onclick="_photoViewerPrev()" ${idx===0?'disabled':''} style="flex:1;padding:12px;background:rgba(255,255,255,${idx===0?'0.1':'0.2'});border:none;color:#fff;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;opacity:${idx===0?'0.4':'1'}">‹ 前の写真</button>
-      <button onclick="_photoViewerNext()" ${idx===total-1?'disabled':''} style="flex:1;padding:12px;background:rgba(255,255,255,${idx===total-1?'0.1':'0.2'});border:none;color:#fff;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;opacity:${idx===total-1?'0.4':'1'}">次の写真 ›</button>
-    </div>` : `<div style="padding:12px 16px;text-align:center;color:rgba(255,255,255,0.4);font-size:12px">タップして閉じる以外は画面外をタップ</div>`}
+  <div id="photoFullscreen" onclick="closePhotoFullscreen()"
+    style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out">
+    <div style="color:#fff;font-size:13px;font-weight:700;margin-bottom:12px;opacity:0.8">${type} — タップして閉じる</div>
+    <img src="${src}" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
   </div>`);
-  // 背景タップで閉じる（ボタン以外）
-  document.getElementById('photoFullscreen').addEventListener('click', e => {
-    if (e.target === document.getElementById('photoFullscreen')) closePhotoFullscreen();
-  });
-}
-
-function _photoViewerPrev() {
-  if (window._photoViewerIdx > 0) { window._photoViewerIdx--; _renderPhotoViewer(); }
-}
-function _photoViewerNext() {
-  if (window._photoViewerIdx < window._photoViewerList.length - 1) { window._photoViewerIdx++; _renderPhotoViewer(); }
 }
 
 function closePhotoFullscreen() {
@@ -2080,4 +1939,50 @@ async function renderOwnerPanel() {
       <div style="display:flex;flex-direction:column;gap:6px">
         ${loginLogs.map(log=>`
           <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
-            <span style="font-size:18px">${log.action==='
+            <span style="font-size:18px">${log.action==='login'?'🔓':'🔒'}</span>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:700">${log.staff_name}</div>
+              <div style="font-size:11px;color:var(--sub)">${log.action==='login'?'ログイン':'ログアウト'}</div>
+            </div>
+            <div style="font-size:11px;color:var(--sub)">${new Date(log.logged_at).toLocaleString('ja-JP')}</div>
+          </div>`).join('')}
+        ${loginLogs.length===0?'<div style="text-align:center;color:var(--sub);padding:20px">履歴がありません</div>':''}
+      </div>
+    </div>`;
+}
+
+function clearOwnerFilter() {
+  const from = document.getElementById('ownerFromDate');
+  const to   = document.getElementById('ownerToDate');
+  if(from) from.value = '';
+  if(to)   to.value   = '';
+  renderOwnerPanel();
+}
+
+// ─── 初期化 ───────────────────────────────────────────────────
+function initApp() {
+  document.title = COMPANY.title + '｜' + COMPANY.name;
+  const h1=document.querySelector('.header h1'); if(h1) h1.textContent='🔧 '+COMPANY.title;
+
+  loadState();
+  updateSyncUI();
+  updateNumDisplay();
+  renderAllChecklists();
+  renderCarRepairItems();
+  renderInsuranceSelect();
+
+  renderMechSelect('mechSelectRepair');
+  renderMechSelect('mechSelectShakken');
+  renderMechSelect('mechSelectAccident');
+
+  renderSubStaffArea();
+
+  setTimeout(()=>loadMasters(), 500);
+
+  const today=new Date().toISOString().split('T')[0];
+  ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
+}
+
+// ─── 起動 ─────────────────────────────────────────────────────
+initSupabase();
+initAuth();
