@@ -15,6 +15,75 @@ function initSupabase() {
   } catch(e) { console.log('Supabase初期化エラー:', e); }
 }
 
+// ─── オフラインキュー ────────────────────────────────────────
+const QUEUE_KEY = 'ws3_offline_queue';
+
+function queueGet() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch(e) { return []; }
+}
+function queueSave(q) {
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+}
+function queueAdd(type, data) {
+  const q = queueGet();
+  // 同じIDのorderは上書き（最新だけ送ればOK）
+  const idx = q.findIndex(item => item.type === type && item.data?.id === data?.id);
+  if (idx >= 0) q[idx] = { type, data, ts: Date.now() };
+  else q.push({ type, data, ts: Date.now() });
+  queueSave(q);
+  updateQueueBadge();
+}
+function updateQueueBadge() {
+  const q = queueGet();
+  const badge = document.getElementById('queueBadge');
+  if (badge) {
+    badge.style.display = q.length > 0 ? 'inline' : 'none';
+    badge.textContent = `⏳ 未送信 ${q.length}件`;
+  }
+}
+async function flushQueue() {
+  if (!sbReady) return;
+  const q = queueGet();
+  if (!q.length) return;
+  console.log(`オフラインキュー送信: ${q.length}件`);
+  const failed = [];
+  for (const item of q) {
+    try {
+      if (item.type === 'order') {
+        const ok = await sbSaveOrder(item.data);
+        if (!ok) failed.push(item);
+      } else if (item.type === 'delete') {
+        await sbDeleteOrder(item.data.id);
+      } else if (item.type === 'photo') {
+        await sb.from(DB_TABLES.PHOTOS).insert([item.data]);
+      }
+    } catch(e) { failed.push(item); }
+  }
+  queueSave(failed);
+  updateQueueBadge();
+  if (failed.length === 0 && q.length > 0) {
+    showToast(`✅ ${q.length}件のデータをクラウドに送信しました`, 'success', 4000);
+  }
+}
+
+// Supabase復旧を定期チェック（30秒ごと）
+let reconnectTimer = null;
+function startReconnectWatch() {
+  if (reconnectTimer) return;
+  reconnectTimer = setInterval(async () => {
+    if (sbReady) { await flushQueue(); return; }
+    try {
+      const { error } = await sb.from(DB_TABLES.STAFF).select('id').limit(1);
+      if (!error) {
+        sbReady = true;
+        updateSyncUI();
+        showToast('🌐 サーバーに再接続しました', 'success');
+        await flushQueue();
+      }
+    } catch(e) {}
+  }, 30000);
+}
+
 // ─── アプリ状態 ───────────────────────────────────────────────
 let S = {
   items: {
@@ -106,7 +175,11 @@ function setSaving(btnId, saving) {
 
 // ─── Supabase CRUD ────────────────────────────────────────────
 async function sbSaveOrder(order) {
-  if (!sb) return false;
+  if (!sb || !sbReady) {
+    // オフライン → キューに積む
+    queueAdd('order', order);
+    return false;
+  }
   try {
     const { error } = await sb.from(DB_TABLES.KIROKU).upsert({
       id: order.id, order_num: order.orderNum, order_type: order.type,
@@ -129,7 +202,8 @@ async function sbSaveOrder(order) {
     if (error) throw error;
     return true;
   } catch(e) {
-    console.log('Supabase保存エラー:', e);
+    console.log('Supabase保存エラー → キューに追加:', e);
+    queueAdd('order', order);
     return false;
   }
 }
@@ -162,12 +236,18 @@ async function sbLoadOrders() {
 }
 
 async function sbDeleteOrder(id) {
-  if (!sb) return false;
+  if (!sb || !sbReady) {
+    queueAdd('delete', { id });
+    return false;
+  }
   try {
     const { error } = await sb.from(DB_TABLES.KIROKU).delete().eq('id', id);
     if (error) throw error;
     return true;
-  } catch(e) { return false; }
+  } catch(e) {
+    queueAdd('delete', { id });
+    return false;
+  }
 }
 
 // ─── 写真管理 ────────────────────────────────────────────────
@@ -239,11 +319,24 @@ async function uploadPendingPhotos(orderId) {
   const pending = window._pendingPhotos || {};
   const keys    = Object.keys(pending);
   if (!keys.length || !sb) return;
+  if (!sbReady) {
+    // オフライン → 写真もキューに
+    keys.forEach(k => {
+      queueAdd('photo', { kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' });
+    });
+    window._pendingPhotos = {};
+    return;
+  }
   try {
     await sb.from(DB_TABLES.PHOTOS).insert(
       keys.map(k => ({ kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' }))
     );
-  } catch(e) { console.log('写真保存エラー:', e); }
+  } catch(e) {
+    console.log('写真保存エラー → キューに追加:', e);
+    keys.forEach(k => {
+      queueAdd('photo', { kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' });
+    });
+  }
   window._pendingPhotos = {};
 }
 
@@ -1981,8 +2074,22 @@ function initApp() {
 
   const today=new Date().toISOString().split('T')[0];
   ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
+
+  // オフラインキューバッジをヘッダーに追加
+  const headerRight = document.querySelector('.header-right');
+  if (headerRight && !document.getElementById('queueBadge')) {
+    const badge = document.createElement('span');
+    badge.id = 'queueBadge';
+    badge.style.cssText = 'display:none;background:#a08030;color:#fff;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer';
+    badge.onclick = () => { if(sbReady) flushQueue(); else showToast('サーバーに接続できません','error'); };
+    headerRight.insertBefore(badge, headerRight.firstChild);
+  }
+  updateQueueBadge();
+  // 起動時にキューがあれば送信試行
+  if (sbReady) flushQueue();
 }
 
 // ─── 起動 ─────────────────────────────────────────────────────
 initSupabase();
 initAuth();
+startReconnectWatch();
