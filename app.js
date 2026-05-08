@@ -183,69 +183,81 @@ async function loadPhotosForOrder(orderId) {
 }
 
 function _compressAndRun(file, callback) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    const arrayBuf = e.target.result;
+  // まず DataURL で読み込んでEXIF取得 → canvas で正しい向きに描画
+  const fr1 = new FileReader();
+  fr1.onload = e1 => {
     // EXIF orientation 取得
     let orientation = 1;
     try {
-      const view = new DataView(arrayBuf);
-      if (view.getUint16(0, false) === 0xFFD8) {
-        let offset = 2;
-        while (offset < view.byteLength) {
-          const marker = view.getUint16(offset, false);
-          offset += 2;
-          if (marker === 0xFFE1) {
-            if (view.getUint32(offset + 2, false) === 0x45786966) {
-              const little = view.getUint16(offset + 8, false) === 0x4949;
-              const ifdOffset = view.getUint32(offset + 14, little);
-              const entries = view.getUint16(offset + 8 + ifdOffset, little);
-              for (let i = 0; i < entries; i++) {
-                if (view.getUint16(offset + 8 + ifdOffset + 2 + i * 12, little) === 0x0112) {
-                  orientation = view.getUint16(offset + 8 + ifdOffset + 2 + i * 12 + 8, little);
-                  break;
+      const fr2 = new FileReader();
+      fr2.onloadend = () => {
+        try {
+          const buf = fr2.result;
+          const view = new DataView(buf);
+          if (view.getUint16(0, false) === 0xFFD8) {
+            let off = 2;
+            while (off < view.byteLength) {
+              const marker = view.getUint16(off, false); off += 2;
+              if (marker === 0xFFE1) {
+                if (view.getUint32(off + 2, false) === 0x45786966) {
+                  const le = view.getUint16(off + 8, false) === 0x4949;
+                  const ifd = view.getUint32(off + 14, le);
+                  const n = view.getUint16(off + 8 + ifd, le);
+                  for (let i = 0; i < n; i++) {
+                    if (view.getUint16(off + 8 + ifd + 2 + i * 12, le) === 0x0112) {
+                      orientation = view.getUint16(off + 8 + ifd + 2 + i * 12 + 8, le);
+                      break;
+                    }
+                  }
                 }
+                break;
               }
+              if (off + view.getUint16(off, false) > view.byteLength) break;
+              off += view.getUint16(off, false);
             }
-            break;
           }
-          offset += view.getUint16(offset, false);
-        }
-      }
-    } catch(ex) { orientation = 1; }
-
-    const blob = new Blob([arrayBuf], { type: file.type });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      const maxW = 1200;
-      let w = img.width, h = img.height;
-      // orientation に応じて縦横を入れ替え
-      const swap = orientation >= 5 && orientation <= 8;
-      let dw = swap ? h : w;
-      let dh = swap ? w : h;
-      if (dw > maxW) { dh = dh * maxW / dw; dw = maxW; }
-      const canvas = document.createElement('canvas');
-      canvas.width = dw; canvas.height = dh;
-      const ctx = canvas.getContext('2d');
-      // 回転・反転を適用
-      switch (orientation) {
-        case 2: ctx.transform(-1,0,0,1,dw,0); break;
-        case 3: ctx.transform(-1,0,0,-1,dw,dh); break;
-        case 4: ctx.transform(1,0,0,-1,0,dh); break;
-        case 5: ctx.transform(0,1,1,0,0,0); break;
-        case 6: ctx.transform(0,1,-1,0,dh,0); break;
-        case 7: ctx.transform(0,-1,-1,0,dh,dw); break;
-        case 8: ctx.transform(0,-1,1,0,0,dw); break;
-      }
-      if (swap) ctx.drawImage(img, 0, 0, h, w);
-      else ctx.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      callback(canvas.toDataURL('image/jpeg', 0.7));
-    };
-    img.src = url;
+        } catch(ex) { orientation = 1; }
+        _drawCompressed(e1.target.result, orientation, callback);
+      };
+      fr2.readAsArrayBuffer(file);
+    } catch(ex) { _drawCompressed(e1.target.result, 1, callback); }
   };
-  reader.readAsArrayBuffer(file);
+  fr1.readAsDataURL(file);
+}
+
+function _drawCompressed(dataUrl, orientation, callback) {
+  const img = new Image();
+  img.onload = () => {
+    const maxSize = 1200;
+    const sw = img.width, sh = img.height; // 元のサイズ
+    const swap = orientation >= 5 && orientation <= 8;
+    // 出力サイズ（swapなら縦横入れ替え）
+    let ow = swap ? sh : sw;
+    let oh = swap ? sw : sh;
+    // maxSize に収める
+    if (ow > maxSize) { oh = Math.round(oh * maxSize / ow); ow = maxSize; }
+    const canvas = document.createElement('canvas');
+    canvas.width = ow; canvas.height = oh;
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    // 中心を原点にして回転・反転
+    ctx.translate(ow / 2, oh / 2);
+    switch (orientation) {
+      case 2: ctx.scale(-1, 1); break;
+      case 3: ctx.rotate(Math.PI); break;
+      case 4: ctx.scale(1, -1); break;
+      case 5: ctx.rotate(-Math.PI / 2); ctx.scale(-1, 1); break;
+      case 6: ctx.rotate(Math.PI / 2); break;
+      case 7: ctx.rotate(Math.PI / 2); ctx.scale(-1, 1); break;
+      case 8: ctx.rotate(-Math.PI / 2); break;
+    }
+    // swapのときは元の縦横で描画（中心基準なので -sw/2, -sh/2 から）
+    if (swap) ctx.drawImage(img, -sh / 2 * (ow / sh), -sw / 2 * (oh / sw), sh * (ow / sh), sw * (oh / sw));
+    else ctx.drawImage(img, -ow / 2, -oh / 2, ow, oh);
+    ctx.restore();
+    callback(canvas.toDataURL('image/jpeg', 0.7));
+  };
+  img.src = dataUrl;
 }
 
 function addPhotoSlot(containerId, type) {
