@@ -212,6 +212,19 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
       </div>
       <div class="row2">
         <div>
+          <label>入庫手段</label>
+          <select id="r-nyukoMethod">
+            <option value="">未設定</option>
+            <option value="お客入庫">🚗 お客入庫</option>
+            <option value="引き取り">🔑 引き取り</option>
+            <option value="レッカー">🚨 レッカー</option>
+            <option value="現地修理">🔧 現地修理</option>
+          </select>
+        </div>
+        <div><label>入庫予定時間</label><input type="time" id="r-nyukoTime" /></div>
+      </div>
+      <div class="row2">
+        <div>
           <label>顧客名</label>
           <div class="inp-wrap">
             <input id="r-custName" placeholder="山田 太郎" inputmode="text" list="custNameList" oninput="onCustSelected('r-custName','r-carName')" />
@@ -252,14 +265,22 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
 
     <div class="card">
       <div class="card-title">✅ 依頼事項</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px">
         <button id="r-tab-car" class="btn btn-primary btn-sm" onclick="switchRepairType('car')">🚗 乗用車</button>
         <button id="r-tab-truck" class="btn btn-gray btn-sm" onclick="switchRepairType('truck')">🚛 トラック</button>
         <button id="r-tab-aircon" class="btn btn-gray btn-sm" onclick="switchRepairType('aircon')">❄️ エアコン</button>
+        <button id="r-tab-freezer" class="btn btn-gray btn-sm" onclick="switchRepairType('freezer')">🧊 冷凍機</button>
       </div>
       <div id="repair-car-items" class="check-grid"></div>
       <div id="repair-truck-items" class="check-grid" style="display:none"></div>
       <div id="repair-aircon-items" class="check-grid" style="display:none"></div>
+      <div id="repair-freezer-items" style="display:none">
+        <div style="margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">🏭 修理工場</div>
+          <div id="repair-freezer-workshop" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+        </div>
+        <div class="check-grid" id="repair-freezer-check"></div>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">👁️ 気がついた事</div>
@@ -973,6 +994,44 @@ function renderChecklist(section, id) {
       S.checkState[section][label] = !S.checkState[section][label];
       renderChecklist(section, id);
     };
+    c.appendChild(d);
+  });
+}
+
+// ─── 冷凍機 ───────────────────────────────────────────────────
+const DEF_FREEZER_REPAIR = [
+  'コンプレッサー交換','エアコンホース交換','ブロアモーター交換',
+  'コンデンサーモーター交換','エアコンガス補充','レシーバー交換',
+  'コンデンサー交換','コンデンサー清掃','ガス漏れ点検',
+];
+let freezerWorkshop = '';
+let freezerCheckState = {};
+
+function setFreezerWorkshop(w) {
+  freezerWorkshop = freezerWorkshop===w ? '' : w;
+  renderFreezerItems();
+}
+function renderFreezerItems() {
+  const ws = ['DENSO','菱重','トプレック','サーモキング','自社'];
+  const we = document.getElementById('repair-freezer-workshop');
+  if (we) {
+    let wh = '';
+    ws.forEach(function(w) {
+      const bg = freezerWorkshop===w ? 'var(--accent)' : 'var(--border)';
+      const cl = freezerWorkshop===w ? '#000' : 'var(--text)';
+      wh += '<button onclick="setFreezerWorkshop(\'' + w + '\')" style="padding:8px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin:3px;background:' + bg + ';color:' + cl + '">' + w + '</button>';
+    });
+    we.innerHTML = wh;
+  }
+  const c = document.getElementById('repair-freezer-check');
+  if (!c) return;
+  c.innerHTML = '';
+  DEF_FREEZER_REPAIR.forEach(label => {
+    const checked = freezerCheckState[label] || false;
+    const d = document.createElement('div');
+    d.className = 'check-item' + (checked ? ' checked' : '');
+    d.innerHTML = '<span>'+(checked?'✅':'⬜')+'</span><span>'+label+'</span>';
+    d.onclick = () => { freezerCheckState[label] = !freezerCheckState[label]; renderFreezerItems(); };
     c.appendChild(d);
   });
 }
