@@ -252,14 +252,22 @@ color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-e
 
     <div class="card">
       <div class="card-title">✅ 依頼事項</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px">
         <button id="r-tab-car" class="btn btn-primary btn-sm" onclick="switchRepairType('car')">🚗 乗用車</button>
         <button id="r-tab-truck" class="btn btn-gray btn-sm" onclick="switchRepairType('truck')">🚛 トラック</button>
         <button id="r-tab-aircon" class="btn btn-gray btn-sm" onclick="switchRepairType('aircon')">❄️ エアコン</button>
+        <button id="r-tab-freezer" class="btn btn-gray btn-sm" onclick="switchRepairType('freezer')">🧊 冷凍機</button>
       </div>
       <div id="repair-car-items" class="check-grid"></div>
       <div id="repair-truck-items" class="check-grid" style="display:none"></div>
       <div id="repair-aircon-items" class="check-grid" style="display:none"></div>
+      <div id="repair-freezer-items" style="display:none">
+        <div style="margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">🏭 修理工場</div>
+          <div id="repair-freezer-workshop" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+        </div>
+        <div class="check-grid" id="repair-freezer-check"></div>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">👁️ 気がついた事</div>
@@ -973,6 +981,46 @@ function renderChecklist(section, id) {
       S.checkState[section][label] = !S.checkState[section][label];
       renderChecklist(section, id);
     };
+    c.appendChild(d);
+  });
+}
+
+// ─── 冷凍機 ───────────────────────────────────────────────────
+const DEF_FREEZER_REPAIR = [
+  'コンプレッサー交換','エアコンホース交換','ブロアモーター交換',
+  'コンデンサーモーター交換','エアコンガス補充','レシーバー交換',
+  'コンデンサー交換','コンデンサー清掃','ガス漏れ点検',
+];
+let freezerWorkshop = '';
+let freezerCheckState = {};
+
+function setFreezerWorkshop(w) {
+  freezerWorkshop = freezerWorkshop === w ? '' : w;
+  renderFreezerItems();
+}
+
+function renderFreezerItems() {
+  const ws = ['DENSO','菱重','トプレック','サーモキング','自社'];
+  const we = document.getElementById('repair-freezer-workshop');
+  if (we) {
+    we.innerHTML = '';
+    ws.forEach(function(w) {
+      const btn = document.createElement('button');
+      btn.textContent = w;
+      btn.style.cssText = 'padding:8px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin:3px;background:' + (freezerWorkshop===w?'var(--accent)':'var(--border)') + ';color:' + (freezerWorkshop===w?'#000':'var(--text)');
+      btn.onclick = (function(name){ return function(){ setFreezerWorkshop(name); }; })(w);
+      we.appendChild(btn);
+    });
+  }
+  const c = document.getElementById('repair-freezer-check');
+  if (!c) return;
+  c.innerHTML = '';
+  DEF_FREEZER_REPAIR.forEach(function(label) {
+    const checked = freezerCheckState[label] || false;
+    const d = document.createElement('div');
+    d.className = 'check-item' + (checked ? ' checked' : '');
+    d.innerHTML = '<span>' + (checked ? '✅' : '⬜') + '</span><span>' + label + '</span>';
+    d.onclick = function() { freezerCheckState[label] = !freezerCheckState[label]; renderFreezerItems(); };
     c.appendChild(d);
   });
 }
@@ -2592,74 +2640,4 @@ function transferToStaff(name) {
   text += `入庫: ${order.dateIn||''}　出庫予定: ${order.dateOut||''}\n`;
   if (order.remarks) text += `備考: ${order.remarks}\n`;
   text += `────────────\nステータス: ${order.status}`;
-  window.open('https://line.me/R/share?text=' + encodeURIComponent(text), '_blank');
-}
-
-function sendLine() {
-  const order = currentOrder;
-  if (!order) return;
-  let text = `【${order.type==='shakken'?'車検':'作業'}指示書】${order.orderNum||''}\n`;
-  text += `顧客: ${order.custName||''}\n車両: ${order.carName||''} ${order.carPlate||''}\n`;
-  text += `入庫: ${order.dateIn||''}　出庫予定: ${order.dateOut||''}\n`;
-  text += `担当: ${order.mechName||''}　受付: ${order.receptionName||''}\n`;
-  if (order.remarks) text += `\n【備考】${order.remarks}`;
-  window.open('https://line.me/R/share?text=' + encodeURIComponent(text), '_blank');
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-}
-
-let fsTargetId = null;
-let fsIsTextarea = false;
-
-function openFs(inputId, label) {
-  const el = document.getElementById(inputId);
-  fsTargetId = inputId;
-  fsIsTextarea = false;
-  document.getElementById('fsLabel').textContent = label;
-  document.getElementById('fsInput').value = el ? el.value : '';
-  document.getElementById('fsModal').classList.add('open');
-  setTimeout(() => document.getElementById('fsInput').focus(), 100);
-}
-
-function openFsTextarea(inputId, label) {
-  openFs(inputId, label);
-  fsIsTextarea = true;
-}
-
-function closeFs() {
-  const fsVal = document.getElementById('fsInput').value;
-  if (fsTargetId) {
-    const el = document.getElementById(fsTargetId);
-    if (el) el.value = fsVal;
-  }
-  document.getElementById('fsModal').classList.remove('open');
-  fsTargetId = null;
-}
-
-// ========== INIT ==========
-function init() {
-  loadState();
-  if (!S.customers) S.customers = [];
-  initSupabase();
-  renderAllChecklists();
-  renderCarRepairItems();
-  renderFreezerItems();
-  renderStaff();
-  updateSyncUI();
-  updateNumDisplay();
-  setTimeout(() => loadMasters(), 1000);
-  const today = new Date().toISOString().split('T')[0];
-  const rDate = document.getElementById('r-dateIn');
-  const skDate = document.getElementById('sk-dateIn');
-  if (rDate) rDate.value = today;
-  if (skDate) skDate.value = today;
-  const acDate = document.getElementById('ac-dateIn');
-  if (acDate) acDate.value = today;
-}
-
-init();
-</script>
-</body>
-</html>
+  window.open('https://line.m
