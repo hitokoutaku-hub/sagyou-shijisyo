@@ -64,6 +64,7 @@
             <option value="お客入庫">🚗 お客入庫</option>
             <option value="引き取り">🔑 引き取り</option>
             <option value="レッカー">🚨 レッカー</option>
+            <option value="現地修理">🔧 現地修理</option>
           </select>
         </div>
         <div><label>入庫予定時間</label><input type="time" id="r-nyukoTime"></div>
@@ -113,14 +114,20 @@
 
     <div class="card">
       <div class="card-title">✅ 依頼事項</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
-        <button id="r-tab-car"    class="btn btn-primary btn-sm" onclick="switchRepairType('car')">🚗 乗用車</button>
-        <button id="r-tab-truck"  class="btn btn-gray btn-sm"    onclick="switchRepairType('truck')">🚛 トラック</button>
-        <button id="r-tab-aircon" class="btn btn-gray btn-sm"    onclick="switchRepairType('aircon')">❄️ エアコン</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+        <button id="r-tab-car"     class="btn btn-primary btn-sm" onclick="switchRepairType('car')">🚗 乗用車</button>
+        <button id="r-tab-truck"   class="btn btn-gray btn-sm"    onclick="switchRepairType('truck')">🚛 トラック</button>
+        <button id="r-tab-aircon"  class="btn btn-gray btn-sm"    onclick="switchRepairType('aircon')">❄️ エアコン</button>
+        <button id="r-tab-freezer" class="btn btn-gray btn-sm"    onclick="switchRepairType('freezer')">🧊 冷凍機</button>
       </div>
       <div id="repair-car-items"    class="check-grid"></div>
       <div id="repair-truck-items"  class="check-grid" style="display:none"></div>
       <div id="repair-aircon-items" class="check-grid" style="display:none"></div>
+      <div id="repair-freezer-items" style="display:none">
+        <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">🏭 修理工場</div>
+        <div id="repair-freezer-workshop" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+        <div class="check-grid" id="repair-freezer-check"></div>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">👁️ 気がついた事</div>
@@ -217,6 +224,7 @@
             <option value="お客入庫">🚗 お客入庫</option>
             <option value="引き取り">🔑 引き取り</option>
             <option value="レッカー">🚨 レッカー</option>
+            <option value="現地修理">🔧 現地修理</option>
           </select>
         </div>
         <div><label>入庫予定時間</label><input type="time" id="sk-nyukoTime"></div>
