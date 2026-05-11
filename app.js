@@ -15,75 +15,6 @@ function initSupabase() {
   } catch(e) { console.log('Supabase初期化エラー:', e); }
 }
 
-// ─── オフラインキュー ────────────────────────────────────────
-const QUEUE_KEY = 'ws3_offline_queue';
-
-function queueGet() {
-  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch(e) { return []; }
-}
-function queueSave(q) {
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
-}
-function queueAdd(type, data) {
-  const q = queueGet();
-  // 同じIDのorderは上書き（最新だけ送ればOK）
-  const idx = q.findIndex(item => item.type === type && item.data?.id === data?.id);
-  if (idx >= 0) q[idx] = { type, data, ts: Date.now() };
-  else q.push({ type, data, ts: Date.now() });
-  queueSave(q);
-  updateQueueBadge();
-}
-function updateQueueBadge() {
-  const q = queueGet();
-  const badge = document.getElementById('queueBadge');
-  if (badge) {
-    badge.style.display = q.length > 0 ? 'inline' : 'none';
-    badge.textContent = `⏳ 未送信 ${q.length}件`;
-  }
-}
-async function flushQueue() {
-  if (!sbReady) return;
-  const q = queueGet();
-  if (!q.length) return;
-  console.log(`オフラインキュー送信: ${q.length}件`);
-  const failed = [];
-  for (const item of q) {
-    try {
-      if (item.type === 'order') {
-        const ok = await sbSaveOrder(item.data);
-        if (!ok) failed.push(item);
-      } else if (item.type === 'delete') {
-        await sbDeleteOrder(item.data.id);
-      } else if (item.type === 'photo') {
-        await sb.from(DB_TABLES.PHOTOS).insert([item.data]);
-      }
-    } catch(e) { failed.push(item); }
-  }
-  queueSave(failed);
-  updateQueueBadge();
-  if (failed.length === 0 && q.length > 0) {
-    showToast(`✅ ${q.length}件のデータをクラウドに送信しました`, 'success', 4000);
-  }
-}
-
-// Supabase復旧を定期チェック（30秒ごと）
-let reconnectTimer = null;
-function startReconnectWatch() {
-  if (reconnectTimer) return;
-  reconnectTimer = setInterval(async () => {
-    if (sbReady) { await flushQueue(); return; }
-    try {
-      const { error } = await sb.from(DB_TABLES.STAFF).select('id').limit(1);
-      if (!error) {
-        sbReady = true;
-        updateSyncUI();
-        showToast('🌐 サーバーに再接続しました', 'success');
-        await flushQueue();
-      }
-    } catch(e) {}
-  }, 30000);
-}
-
 // ─── アプリ状態 ───────────────────────────────────────────────
 let S = {
   items: {
@@ -175,11 +106,7 @@ function setSaving(btnId, saving) {
 
 // ─── Supabase CRUD ────────────────────────────────────────────
 async function sbSaveOrder(order) {
-  if (!sb || !sbReady) {
-    // オフライン → キューに積む
-    queueAdd('order', order);
-    return false;
-  }
+  if (!sb) return false;
   try {
     const { error } = await sb.from(DB_TABLES.KIROKU).upsert({
       id: order.id, order_num: order.orderNum, order_type: order.type,
@@ -202,8 +129,7 @@ async function sbSaveOrder(order) {
     if (error) throw error;
     return true;
   } catch(e) {
-    console.log('Supabase保存エラー → キューに追加:', e);
-    queueAdd('order', order);
+    console.log('Supabase保存エラー:', e);
     return false;
   }
 }
@@ -236,18 +162,12 @@ async function sbLoadOrders() {
 }
 
 async function sbDeleteOrder(id) {
-  if (!sb || !sbReady) {
-    queueAdd('delete', { id });
-    return false;
-  }
+  if (!sb) return false;
   try {
     const { error } = await sb.from(DB_TABLES.KIROKU).delete().eq('id', id);
     if (error) throw error;
     return true;
-  } catch(e) {
-    queueAdd('delete', { id });
-    return false;
-  }
+  } catch(e) { return false; }
 }
 
 // ─── 写真管理 ────────────────────────────────────────────────
@@ -319,24 +239,11 @@ async function uploadPendingPhotos(orderId) {
   const pending = window._pendingPhotos || {};
   const keys    = Object.keys(pending);
   if (!keys.length || !sb) return;
-  if (!sbReady) {
-    // オフライン → 写真もキューに
-    keys.forEach(k => {
-      queueAdd('photo', { kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' });
-    });
-    window._pendingPhotos = {};
-    return;
-  }
   try {
     await sb.from(DB_TABLES.PHOTOS).insert(
       keys.map(k => ({ kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' }))
     );
-  } catch(e) {
-    console.log('写真保存エラー → キューに追加:', e);
-    keys.forEach(k => {
-      queueAdd('photo', { kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' });
-    });
-  }
+  } catch(e) { console.log('写真保存エラー:', e); }
   window._pendingPhotos = {};
 }
 
@@ -557,15 +464,55 @@ function setPreventOkNg(label, val) {
 // ─── 修理タイプ切り替え ───────────────────────────────────────
 let repairType = 'car';
 
+// ─── 冷凍機 ───────────────────────────────────────────────────
+const DEF_FREEZER_REPAIR = [
+  'コンプレッサー交換','エアコンホース交換','ブロアモーター交換',
+  'コンデンサーモーター交換','エアコンガス補充','レシーバー交換',
+  'コンデンサー交換','コンデンサー清掃','ガス漏れ点検',
+];
+let freezerWorkshop = '';
+let freezerCheckState = {};
+
+function setFreezerWorkshop(w) {
+  freezerWorkshop = freezerWorkshop === w ? '' : w;
+  renderFreezerItems();
+}
+function renderFreezerItems() {
+  const ws = ['DENSO','菱重','トプレック','サーモキング','自社'];
+  const we = document.getElementById('repair-freezer-workshop');
+  if (we) {
+    we.innerHTML = '';
+    ws.forEach(function(w) {
+      const btn = document.createElement('button');
+      btn.textContent = w;
+      btn.style.cssText = 'padding:8px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin:3px;background:' + (freezerWorkshop===w?'var(--accent)':'var(--border)') + ';color:' + (freezerWorkshop===w?'#000':'var(--text)');
+      btn.onclick = (function(name){ return function(){ setFreezerWorkshop(name); }; })(w);
+      we.appendChild(btn);
+    });
+  }
+  const c = document.getElementById('repair-freezer-check');
+  if (!c) return;
+  c.innerHTML = '';
+  DEF_FREEZER_REPAIR.forEach(function(label) {
+    const checked = freezerCheckState[label] || false;
+    const d = document.createElement('div');
+    d.className = 'check-item' + (checked ? ' checked' : '');
+    d.innerHTML = '<span>'+(checked?'✅':'⬜')+'</span><span>'+label+'</span>';
+    d.onclick = function() { freezerCheckState[label] = !freezerCheckState[label]; renderFreezerItems(); };
+    c.appendChild(d);
+  });
+}
+
 function switchRepairType(type) {
   repairType = type;
-  ['car','truck','aircon'].forEach(t => {
+  ['car','truck','aircon','freezer'].forEach(t => {
     document.getElementById('repair-'+t+'-items').style.display = t===type ? '' : 'none';
     document.getElementById('r-tab-'+t).className = 'btn btn-sm ' + (t===type?'btn-primary':'btn-gray');
   });
-  if (type==='car')    renderCarRepairItems();
-  if (type==='truck')  renderTruckItems();
-  if (type==='aircon') renderAirconItems();
+  if (type==='car')     renderCarRepairItems();
+  if (type==='truck')   renderTruckItems();
+  if (type==='aircon')  renderAirconItems();
+  if (type==='freezer') renderFreezerItems();
 }
 
 function _renderCheckGrid(cid, items, stateObj, onToggle) {
@@ -958,6 +905,8 @@ async function saveRepair() {
     receptionName: '',
     remarks:   document.getElementById('r-remarks').value,
     carItems, truckItems, airconItems,
+    freezerItems: Object.entries(freezerCheckState).filter(([,v])=>v).map(([k])=>k),
+    freezerWorkshop,
     noticeItems: Object.entries(S.checkState.notice||{}).filter(([,v])=>v).map(([k])=>k),
     preventResults,
     workItems: Object.entries(S.checkState.work||{}).filter(([,v])=>v).map(([k])=>k),
@@ -990,12 +939,12 @@ function clearRepair() {
   const partsPending=document.getElementById('r-partsPending'); if(partsPending) partsPending.checked=false;
   document.getElementById('r-status').value = '入庫中';
   document.getElementById('r-dateIn').value = new Date().toISOString().split('T')[0];
-  S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={};
+  S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; freezerCheckState={}; freezerWorkshop='';
   currentSubStaff=[];
   const pc=document.getElementById('r-photos'); if(pc) pc.innerHTML='';
   window._pendingPhotos={};
   switchRepairType('car');
-  renderAllChecklists(); renderCarRepairItems(); renderTruckItems(); renderAirconItems();
+  renderAllChecklists(); renderCarRepairItems(); renderTruckItems(); renderAirconItems(); renderFreezerItems();
   renderSubStaffArea();
   updateNumDisplay();
 }
@@ -2062,6 +2011,7 @@ function initApp() {
   updateNumDisplay();
   renderAllChecklists();
   renderCarRepairItems();
+  renderFreezerItems();
   renderInsuranceSelect();
 
   renderMechSelect('mechSelectRepair');
@@ -2074,22 +2024,8 @@ function initApp() {
 
   const today=new Date().toISOString().split('T')[0];
   ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
-
-  // オフラインキューバッジをヘッダーに追加
-  const headerRight = document.querySelector('.header-right');
-  if (headerRight && !document.getElementById('queueBadge')) {
-    const badge = document.createElement('span');
-    badge.id = 'queueBadge';
-    badge.style.cssText = 'display:none;background:#a08030;color:#fff;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer';
-    badge.onclick = () => { if(sbReady) flushQueue(); else showToast('サーバーに接続できません','error'); };
-    headerRight.insertBefore(badge, headerRight.firstChild);
-  }
-  updateQueueBadge();
-  // 起動時にキューがあれば送信試行
-  if (sbReady) flushQueue();
 }
 
 // ─── 起動 ─────────────────────────────────────────────────────
 initSupabase();
 initAuth();
-startReconnectWatch();
