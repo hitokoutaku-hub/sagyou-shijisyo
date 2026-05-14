@@ -1217,7 +1217,7 @@ async function openShijishoView(order) {
           <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
           <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
         </div>
-        <img src="${p.photo_b64}" data-photo-id="${p.id||''}" data-photo-type="${p.photo_type}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen(this.src,this.dataset.photoType,this.dataset.photoId)">
+        <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen('fs_${i}','${p.photo_type}','${p.id||''}')">
       </div>`).join('');
     photoHtml=shijishoSection('📷 写真',`
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -1225,7 +1225,7 @@ async function openShijishoView(order) {
         <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(false)">⬜ 全解除</button>
         <button class="btn btn-primary btn-sm" onclick="downloadSelectedPhotos()">📥 ダウンロード</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr;gap:12px">${imgs}</div>`);
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>`);
   }
 
   const alreadyInOrder = order.mechId===currentUser?.id || (order.subStaff||[]).some(s=>s.id===currentUser?.id);
@@ -1265,7 +1265,7 @@ async function openShijishoView(order) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           ${['作業前','作業中','作業後','納品書'].map(t=>`<button class="btn btn-gray btn-sm" onclick="addPhotoToOrder('${order.id}','shijisho-photos','${t}')">＋ ${t}</button>`).join('')}
         </div>
-        <div id="shijisho-photos" style="display:grid;grid-template-columns:1fr;gap:8px"></div>
+        <div id="shijisho-photos" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
       </div>
     </div>
   </div>`);
@@ -1321,22 +1321,49 @@ function closeShijishoView() { document.getElementById('shijishoView')?.remove()
 let _fsRotation = 0;
 let _fsPhotoId  = null;
 
-function openPhotoFullscreen(src, type, photoId) {
+function openPhotoFullscreen(srcKey, type, photoId) {
   _fsRotation = 0;
   _fsPhotoId  = photoId || null;
-  document.body.insertAdjacentHTML('beforeend', `
-  <div id="photoFullscreen" style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center">
-      <span style="color:#fff;font-size:13px;font-weight:700;opacity:0.8">${type}</span>
-      <button onclick="rotateFs(-90)" style="background:#444;border:none;border-radius:8px;color:#fff;font-size:20px;padding:8px 16px;cursor:pointer">↺</button>
-      <button onclick="rotateFs(90)"  style="background:#444;border:none;border-radius:8px;color:#fff;font-size:20px;padding:8px 16px;cursor:pointer">↻</button>
-      <button onclick="saveFsPhoto()" style="background:var(--accent);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer">💾 保存</button>
-      <button onclick="closePhotoFullscreen()" style="background:#666;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer">✕ 閉じる</button>
-    </div>
-    <div style="overflow:hidden;display:flex;align-items:center;justify-content:center;max-width:95vw;max-height:80vh">
-      <img id="fsPhoto" src="${src}" style="max-width:95vw;max-height:80vh;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center">
-    </div>
-  </div>`);
+  // srcKeyがfs_Nの場合は対応するimgのsrcを取得
+  let src = srcKey;
+  if (srcKey && srcKey.startsWith('fs_')) {
+    const idx = srcKey.replace('fs_', '');
+    const imgs = document.querySelectorAll('[id^="photo-slot-view-"] img');
+    if (imgs[idx]) src = imgs[idx].src;
+  }
+  const div = document.createElement('div');
+  div.id = 'photoFullscreen';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center';
+  const btnArea = document.createElement('div');
+  btnArea.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center';
+  btnArea.innerHTML = '<span style="color:#fff;font-size:13px;font-weight:700;opacity:0.8">' + type + '</span>';
+  const btnL = document.createElement('button');
+  btnL.textContent = '↺';
+  btnL.style.cssText = 'background:#444;border:none;border-radius:8px;color:#fff;font-size:20px;padding:8px 16px;cursor:pointer';
+  btnL.onclick = () => rotateFs(-90);
+  const btnR = document.createElement('button');
+  btnR.textContent = '↻';
+  btnR.style.cssText = 'background:#444;border:none;border-radius:8px;color:#fff;font-size:20px;padding:8px 16px;cursor:pointer';
+  btnR.onclick = () => rotateFs(90);
+  const btnSave = document.createElement('button');
+  btnSave.textContent = '💾 保存';
+  btnSave.style.cssText = 'background:var(--accent);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer';
+  btnSave.onclick = () => saveFsPhoto();
+  const btnClose = document.createElement('button');
+  btnClose.textContent = '✕ 閉じる';
+  btnClose.style.cssText = 'background:#666;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer';
+  btnClose.onclick = () => closePhotoFullscreen();
+  btnArea.appendChild(btnL);
+  btnArea.appendChild(btnR);
+  btnArea.appendChild(btnSave);
+  btnArea.appendChild(btnClose);
+  const imgEl = document.createElement('img');
+  imgEl.id = 'fsPhoto';
+  imgEl.src = src;
+  imgEl.style.cssText = 'max-width:95vw;max-height:80vh;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center';
+  div.appendChild(btnArea);
+  div.appendChild(imgEl);
+  document.body.appendChild(div);
 }
 
 function rotateFs(deg) {
@@ -1877,7 +1904,7 @@ function openAddPhotoModal(orderId) {
         <div style="color:var(--accent);font-size:16px;font-weight:800">📷 写真を追加</div>
         <button onclick="closeAddPhotoModal()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer">✕</button>
       </div>
-      <div id="addPhotoSlots" style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:16px"></div>
+      <div id="addPhotoSlots" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px"></div>
       <button class="btn btn-gray" style="width:100%;margin-bottom:10px" onclick="addPhotoSlot('addPhotoSlots','写真')">＋ 写真を選択</button>
       <button class="btn btn-primary" style="width:100%" onclick="saveAddedPhotos('${orderId}')">💾 保存</button>
     </div>
