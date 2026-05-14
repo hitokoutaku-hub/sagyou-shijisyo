@@ -182,22 +182,69 @@ async function loadPhotosForOrder(orderId) {
   } catch(e) { return []; }
 }
 
-function _compressAndRun(file, callback) {
+function _getExifOrientation(file, cb) {
   const reader = new FileReader();
   reader.onload = e => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const maxW = 1200;
-      let w = img.width, h = img.height;
-      if (w > maxW) { h = h * maxW / w; w = maxW; }
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      callback(canvas.toDataURL('image/jpeg', 0.7));
-    };
-    img.src = e.target.result;
+    const view = new DataView(e.target.result);
+    if (view.getUint16(0, false) !== 0xFFD8) { cb(1); return; }
+    const len = view.byteLength;
+    let offset = 2;
+    while (offset < len) {
+      const marker = view.getUint16(offset, false);
+      offset += 2;
+      if (marker === 0xFFE1) {
+        if (view.getUint32(offset += 2, false) !== 0x45786966) { cb(1); return; }
+        const little = view.getUint16(offset += 6, false) === 0x4949;
+        offset += view.getUint32(offset + 4, little);
+        const tags = view.getUint16(offset, little);
+        offset += 2;
+        for (let i = 0; i < tags; i++) {
+          if (view.getUint16(offset + i * 12, little) === 0x0112) {
+            cb(view.getUint16(offset + i * 12 + 8, little)); return;
+          }
+        }
+      } else if ((marker & 0xFF00) !== 0xFF00) break;
+      else offset += view.getUint16(offset, false);
+    }
+    cb(1);
   };
-  reader.readAsDataURL(file);
+  reader.readAsArrayBuffer(file);
+}
+
+function _compressAndRun(file, callback) {
+  _getExifOrientation(file, orientation => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 1200;
+        let w = img.width, h = img.height;
+        // 向きに応じてwidth/heightを入れ替え
+        const rotated = orientation >= 5 && orientation <= 8;
+        if (rotated) { [w, h] = [h, w]; }
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        // EXIFの向きに合わせて回転
+        switch(orientation) {
+          case 2: ctx.transform(-1,0,0,1,w,0); break;
+          case 3: ctx.transform(-1,0,0,-1,w,h); break;
+          case 4: ctx.transform(1,0,0,-1,0,h); break;
+          case 5: ctx.transform(0,1,1,0,0,0); break;
+          case 6: ctx.transform(0,1,-1,0,h,0); break;
+          case 7: ctx.transform(0,-1,-1,0,h,w); break;
+          case 8: ctx.transform(0,-1,1,0,0,w); break;
+          default: break;
+        }
+        if (rotated) ctx.drawImage(img, 0, 0, img.width, img.height);
+        else ctx.drawImage(img, 0, 0, w, h);
+        callback(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function addPhotoSlot(containerId, type) {
@@ -1225,7 +1272,7 @@ async function openShijishoView(order) {
         <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(false)">⬜ 全解除</button>
         <button class="btn btn-primary btn-sm" onclick="downloadSelectedPhotos()">📥 ダウンロード</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>`);
+      <div style="display:grid;grid-template-columns:1fr;gap:12px">${imgs}</div>`);
   }
 
   const alreadyInOrder = order.mechId===currentUser?.id || (order.subStaff||[]).some(s=>s.id===currentUser?.id);
@@ -1265,7 +1312,7 @@ async function openShijishoView(order) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           ${['作業前','作業中','作業後','納品書'].map(t=>`<button class="btn btn-gray btn-sm" onclick="addPhotoToOrder('${order.id}','shijisho-photos','${t}')">＋ ${t}</button>`).join('')}
         </div>
-        <div id="shijisho-photos" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+        <div id="shijisho-photos" style="display:grid;grid-template-columns:1fr;gap:8px"></div>
       </div>
     </div>
   </div>`);
@@ -1824,7 +1871,7 @@ function openAddPhotoModal(orderId) {
         <div style="color:var(--accent);font-size:16px;font-weight:800">📷 写真を追加</div>
         <button onclick="closeAddPhotoModal()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer">✕</button>
       </div>
-      <div id="addPhotoSlots" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px"></div>
+      <div id="addPhotoSlots" style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:16px"></div>
       <button class="btn btn-gray" style="width:100%;margin-bottom:10px" onclick="addPhotoSlot('addPhotoSlots','写真')">＋ 写真を選択</button>
       <button class="btn btn-primary" style="width:100%" onclick="saveAddedPhotos('${orderId}')">💾 保存</button>
     </div>
