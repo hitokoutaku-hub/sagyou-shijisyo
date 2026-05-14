@@ -1333,9 +1333,9 @@ function openPhotoFullscreen(srcKey, type, photoId) {
   }
   const div = document.createElement('div');
   div.id = 'photoFullscreen';
-  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:0';
   const btnArea = document.createElement('div');
-  btnArea.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center';
+  btnArea.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 12px;flex-wrap:wrap;justify-content:center;background:rgba(0,0,0,0.8);width:100%;box-sizing:border-box;flex-shrink:0';
   btnArea.innerHTML = '<span style="color:#fff;font-size:13px;font-weight:700;opacity:0.8">' + type + '</span>';
   const btnL = document.createElement('button');
   btnL.textContent = '↺';
@@ -1357,12 +1357,15 @@ function openPhotoFullscreen(srcKey, type, photoId) {
   btnArea.appendChild(btnR);
   btnArea.appendChild(btnSave);
   btnArea.appendChild(btnClose);
+  const imgWrap = document.createElement('div');
+  imgWrap.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%';
   const imgEl = document.createElement('img');
   imgEl.id = 'fsPhoto';
   imgEl.src = src;
-  imgEl.style.cssText = 'max-width:95vw;max-height:80vh;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center';
+  imgEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center';
+  imgWrap.appendChild(imgEl);
   div.appendChild(btnArea);
-  div.appendChild(imgEl);
+  div.appendChild(imgWrap);
   document.body.appendChild(div);
 }
 
