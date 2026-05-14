@@ -182,69 +182,22 @@ async function loadPhotosForOrder(orderId) {
   } catch(e) { return []; }
 }
 
-function _getExifOrientation(file, cb) {
+function _compressAndRun(file, callback) {
   const reader = new FileReader();
   reader.onload = e => {
-    const view = new DataView(e.target.result);
-    if (view.getUint16(0, false) !== 0xFFD8) { cb(1); return; }
-    const len = view.byteLength;
-    let offset = 2;
-    while (offset < len) {
-      const marker = view.getUint16(offset, false);
-      offset += 2;
-      if (marker === 0xFFE1) {
-        if (view.getUint32(offset += 2, false) !== 0x45786966) { cb(1); return; }
-        const little = view.getUint16(offset += 6, false) === 0x4949;
-        offset += view.getUint32(offset + 4, little);
-        const tags = view.getUint16(offset, little);
-        offset += 2;
-        for (let i = 0; i < tags; i++) {
-          if (view.getUint16(offset + i * 12, little) === 0x0112) {
-            cb(view.getUint16(offset + i * 12 + 8, little)); return;
-          }
-        }
-      } else if ((marker & 0xFF00) !== 0xFF00) break;
-      else offset += view.getUint16(offset, false);
-    }
-    cb(1);
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-function _compressAndRun(file, callback) {
-  _getExifOrientation(file, orientation => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const img = new Image();
-      img.onload = () => {
-        const maxW = 1200;
-        let w = img.width, h = img.height;
-        // 向きに応じてwidth/heightを入れ替え
-        const rotated = orientation >= 5 && orientation <= 8;
-        if (rotated) { [w, h] = [h, w]; }
-        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        // EXIFの向きに合わせて回転
-        switch(orientation) {
-          case 2: ctx.transform(-1,0,0,1,w,0); break;
-          case 3: ctx.transform(-1,0,0,-1,w,h); break;
-          case 4: ctx.transform(1,0,0,-1,0,h); break;
-          case 5: ctx.transform(0,1,1,0,0,0); break;
-          case 6: ctx.transform(0,1,-1,0,h,0); break;
-          case 7: ctx.transform(0,-1,-1,0,h,w); break;
-          case 8: ctx.transform(0,-1,1,0,0,w); break;
-          default: break;
-        }
-        if (rotated) ctx.drawImage(img, 0, 0, img.width, img.height);
-        else ctx.drawImage(img, 0, 0, w, h);
-        callback(canvas.toDataURL('image/jpeg', 0.7));
-      };
-      img.src = e.target.result;
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxW = 1200;
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = h * maxW / w; w = maxW; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', 0.7));
     };
-    reader.readAsDataURL(file);
-  });
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 function addPhotoSlot(containerId, type) {
@@ -1264,7 +1217,7 @@ async function openShijishoView(order) {
           <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
           <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
         </div>
-        <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen('${p.photo_b64}','${p.photo_type}')">
+        <img src="${p.photo_b64}" data-photo-id="${p.id||''}" data-photo-type="${p.photo_type}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen(this.src,this.dataset.photoType,this.dataset.photoId)">
       </div>`).join('');
     photoHtml=shijishoSection('📷 写真',`
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -1365,17 +1318,70 @@ function sendLineReport(orderId) {
 function closeShijishoView() { document.getElementById('shijishoView')?.remove(); }
 
 // ─── 写真全画面表示 ───────────────────────────────────────────
-function openPhotoFullscreen(src, type) {
+let _fsRotation = 0;
+let _fsPhotoId  = null;
+
+function openPhotoFullscreen(src, type, photoId) {
+  _fsRotation = 0;
+  _fsPhotoId  = photoId || null;
   document.body.insertAdjacentHTML('beforeend', `
-  <div id="photoFullscreen" onclick="closePhotoFullscreen()"
-    style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out">
-    <div style="color:#fff;font-size:13px;font-weight:700;margin-bottom:12px;opacity:0.8">${type} — タップして閉じる</div>
-    <img src="${src}" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
+  <div id="photoFullscreen" style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;justify-content:center">
+      <span style="color:#fff;font-size:13px;font-weight:700;opacity:0.8">${type}</span>
+      <button onclick="rotateFs(-90)" style="background:#444;border:none;border-radius:8px;color:#fff;font-size:20px;padding:8px 16px;cursor:pointer">↺</button>
+      <button onclick="rotateFs(90)"  style="background:#444;border:none;border-radius:8px;color:#fff;font-size:20px;padding:8px 16px;cursor:pointer">↻</button>
+      <button onclick="saveFsPhoto()" style="background:var(--accent);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer">💾 保存</button>
+      <button onclick="closePhotoFullscreen()" style="background:#666;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer">✕ 閉じる</button>
+    </div>
+    <div style="overflow:hidden;display:flex;align-items:center;justify-content:center;max-width:95vw;max-height:80vh">
+      <img id="fsPhoto" src="${src}" style="max-width:95vw;max-height:80vh;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center">
+    </div>
   </div>`);
+}
+
+function rotateFs(deg) {
+  _fsRotation = (_fsRotation + deg + 360) % 360;
+  const img = document.getElementById('fsPhoto');
+  if (img) img.style.transform = 'rotate(' + _fsRotation + 'deg)';
+}
+
+async function saveFsPhoto() {
+  const img = document.getElementById('fsPhoto');
+  if (!img) return;
+  if (_fsRotation === 0) { closePhotoFullscreen(); return; }
+  // canvasで回転して新しいbase64を生成
+  const rad = _fsRotation * Math.PI / 180;
+  const sin = Math.abs(Math.sin(rad));
+  const cos = Math.abs(Math.cos(rad));
+  const sw = img.naturalWidth, sh = img.naturalHeight;
+  const cw = Math.round(sw * cos + sh * sin);
+  const ch = Math.round(sw * sin + sh * cos);
+  const canvas = document.createElement('canvas');
+  canvas.width = cw; canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(cw / 2, ch / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(img, -sw / 2, -sh / 2);
+  const newSrc = canvas.toDataURL('image/jpeg', 0.85);
+  // Supabaseの写真を更新
+  if (sb && _fsPhotoId) {
+    try {
+      const { error } = await sb.from(DB_TABLES.PHOTOS).update({ photo_b64: newSrc }).eq('id', _fsPhotoId);
+      if (error) throw error;
+      showToast('✅ 保存しました', 'success');
+      // 一覧の画像も更新
+      document.querySelectorAll('img').forEach(el => {
+        if (el.src === img.src) { el.src = newSrc; }
+      });
+    } catch(e) { showToast('保存失敗: ' + e.message, 'error'); }
+  }
+  closePhotoFullscreen();
 }
 
 function closePhotoFullscreen() {
   document.getElementById('photoFullscreen')?.remove();
+  _fsRotation = 0;
+  _fsPhotoId  = null;
 }
 
 function openManageModal(id) {
