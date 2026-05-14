@@ -1085,9 +1085,26 @@ async function loadList() {
   if(filterMonth)   orders=orders.filter(o=>(o.dateIn||o.savedAt||'').startsWith(filterMonth));
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
-  if(filterKeyword) orders=orders.filter(o=>
-    (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
-    (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword));
+  if(filterKeyword) orders=orders.filter(o=>{
+    // 基本情報
+    if((o.custName||'').includes(filterKeyword)) return true;
+    if((o.carName||'').includes(filterKeyword)) return true;
+    if((o.carPlate||'').includes(filterKeyword)) return true;
+    if((o.orderNum||'').includes(filterKeyword)) return true;
+    if((o.remarks||'').includes(filterKeyword)) return true;
+    // 依頼事項（車種別作業項目）
+    const allItems = [
+      ...(o.carItems||[]),
+      ...(o.truckItems||[]),
+      ...(o.airconItems||[]),
+      ...(o.noticeItems||[]),
+      ...(o.workItems||[]),
+    ];
+    if(allItems.some(item => item.includes(filterKeyword))) return true;
+    // 車検結果
+    if(o.skResults && Object.keys(o.skResults).some(k => k.includes(filterKeyword))) return true;
+    return false;
+  });
   const _n=new Date();const _j=new Date(_n.getTime()+9*60*60*1000);const _td=_j.toISOString().split('T')[0];
   const _tmD=new Date(_j);_tmD.setDate(_tmD.getDate()+1);const _tm=_tmD.toISOString().split('T')[0];
   const statusOrder={'作業中':0,'車検中':1,'入庫中':2,'完了':5,'引渡済':6};
