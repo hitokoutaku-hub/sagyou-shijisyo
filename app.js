@@ -464,55 +464,15 @@ function setPreventOkNg(label, val) {
 // ─── 修理タイプ切り替え ───────────────────────────────────────
 let repairType = 'car';
 
-// ─── 冷凍機 ───────────────────────────────────────────────────
-const DEF_FREEZER_REPAIR = [
-  'コンプレッサー交換','エアコンホース交換','ブロアモーター交換',
-  'コンデンサーモーター交換','エアコンガス補充','レシーバー交換',
-  'コンデンサー交換','コンデンサー清掃','ガス漏れ点検',
-];
-let freezerWorkshop = '';
-let freezerCheckState = {};
-
-function setFreezerWorkshop(w) {
-  freezerWorkshop = freezerWorkshop === w ? '' : w;
-  renderFreezerItems();
-}
-function renderFreezerItems() {
-  const ws = ['DENSO','菱重','トプレック','サーモキング','自社'];
-  const we = document.getElementById('repair-freezer-workshop');
-  if (we) {
-    we.innerHTML = '';
-    ws.forEach(function(w) {
-      const btn = document.createElement('button');
-      btn.textContent = w;
-      btn.style.cssText = 'padding:8px 14px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin:3px;background:' + (freezerWorkshop===w?'var(--accent)':'var(--border)') + ';color:' + (freezerWorkshop===w?'#000':'var(--text)');
-      btn.onclick = (function(name){ return function(){ setFreezerWorkshop(name); }; })(w);
-      we.appendChild(btn);
-    });
-  }
-  const c = document.getElementById('repair-freezer-check');
-  if (!c) return;
-  c.innerHTML = '';
-  DEF_FREEZER_REPAIR.forEach(function(label) {
-    const checked = freezerCheckState[label] || false;
-    const d = document.createElement('div');
-    d.className = 'check-item' + (checked ? ' checked' : '');
-    d.innerHTML = '<span>'+(checked?'✅':'⬜')+'</span><span>'+label+'</span>';
-    d.onclick = function() { freezerCheckState[label] = !freezerCheckState[label]; renderFreezerItems(); };
-    c.appendChild(d);
-  });
-}
-
 function switchRepairType(type) {
   repairType = type;
-  ['car','truck','aircon','freezer'].forEach(t => {
+  ['car','truck','aircon'].forEach(t => {
     document.getElementById('repair-'+t+'-items').style.display = t===type ? '' : 'none';
     document.getElementById('r-tab-'+t).className = 'btn btn-sm ' + (t===type?'btn-primary':'btn-gray');
   });
-  if (type==='car')     renderCarRepairItems();
-  if (type==='truck')   renderTruckItems();
-  if (type==='aircon')  renderAirconItems();
-  if (type==='freezer') renderFreezerItems();
+  if (type==='car')    renderCarRepairItems();
+  if (type==='truck')  renderTruckItems();
+  if (type==='aircon') renderAirconItems();
 }
 
 function _renderCheckGrid(cid, items, stateObj, onToggle) {
@@ -905,8 +865,6 @@ async function saveRepair() {
     receptionName: '',
     remarks:   document.getElementById('r-remarks').value,
     carItems, truckItems, airconItems,
-    freezerItems: Object.entries(freezerCheckState).filter(([,v])=>v).map(([k])=>k),
-    freezerWorkshop,
     noticeItems: Object.entries(S.checkState.notice||{}).filter(([,v])=>v).map(([k])=>k),
     preventResults,
     workItems: Object.entries(S.checkState.work||{}).filter(([,v])=>v).map(([k])=>k),
@@ -939,12 +897,12 @@ function clearRepair() {
   const partsPending=document.getElementById('r-partsPending'); if(partsPending) partsPending.checked=false;
   document.getElementById('r-status').value = '入庫中';
   document.getElementById('r-dateIn').value = new Date().toISOString().split('T')[0];
-  S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; freezerCheckState={}; freezerWorkshop='';
+  S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={};
   currentSubStaff=[];
   const pc=document.getElementById('r-photos'); if(pc) pc.innerHTML='';
   window._pendingPhotos={};
   switchRepairType('car');
-  renderAllChecklists(); renderCarRepairItems(); renderTruckItems(); renderAirconItems(); renderFreezerItems();
+  renderAllChecklists(); renderCarRepairItems(); renderTruckItems(); renderAirconItems();
   renderSubStaffArea();
   updateNumDisplay();
 }
@@ -1086,23 +1044,14 @@ async function loadList() {
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
   if(filterKeyword) orders=orders.filter(o=>{
-    // 基本情報
     if((o.custName||'').includes(filterKeyword)) return true;
     if((o.carName||'').includes(filterKeyword)) return true;
     if((o.carPlate||'').includes(filterKeyword)) return true;
     if((o.orderNum||'').includes(filterKeyword)) return true;
     if((o.remarks||'').includes(filterKeyword)) return true;
-    // 依頼事項（車種別作業項目）
-    const allItems = [
-      ...(o.carItems||[]),
-      ...(o.truckItems||[]),
-      ...(o.airconItems||[]),
-      ...(o.noticeItems||[]),
-      ...(o.workItems||[]),
-    ];
-    if(allItems.some(item => item.includes(filterKeyword))) return true;
-    // 車検結果
-    if(o.skResults && Object.keys(o.skResults).some(k => k.includes(filterKeyword))) return true;
+    const allItems=[...(o.carItems||[]),...(o.truckItems||[]),...(o.airconItems||[]),...(o.noticeItems||[]),...(o.workItems||[])];
+    if(allItems.some(item=>item.includes(filterKeyword))) return true;
+    if(o.skResults&&Object.keys(o.skResults).some(k=>k.includes(filterKeyword))) return true;
     return false;
   });
   const _n=new Date();const _j=new Date(_n.getTime()+9*60*60*1000);const _td=_j.toISOString().split('T')[0];
@@ -1234,7 +1183,7 @@ async function openShijishoView(order) {
           <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
           <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
         </div>
-        <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen('fs_${i}','${p.photo_type}','${p.id||''}')">
+        <img src="${p.photo_b64}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen('${p.photo_b64}','${p.photo_type}')">
       </div>`).join('');
     photoHtml=shijishoSection('📷 写真',`
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -1335,100 +1284,17 @@ function sendLineReport(orderId) {
 function closeShijishoView() { document.getElementById('shijishoView')?.remove(); }
 
 // ─── 写真全画面表示 ───────────────────────────────────────────
-let _fsRotation = 0;
-let _fsPhotoId  = null;
-
-function openPhotoFullscreen(srcKey, type, photoId) {
-  _fsRotation = 0;
-  _fsPhotoId  = photoId || null;
-  // srcKeyがfs_Nの場合は対応するimgのsrcを取得
-  let src = srcKey;
-  if (srcKey && srcKey.startsWith('fs_')) {
-    const idx = srcKey.replace('fs_', '');
-    const imgs = document.querySelectorAll('[id^="photo-slot-view-"] img');
-    if (imgs[idx]) src = imgs[idx].src;
-  }
-  const div = document.createElement('div');
-  div.id = 'photoFullscreen';
-  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:0';
-  const btnArea = document.createElement('div');
-  btnArea.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 12px;flex-wrap:wrap;justify-content:center;background:rgba(0,0,0,0.8);width:100%;box-sizing:border-box;flex-shrink:0';
-  btnArea.innerHTML = '<span style="color:#fff;font-size:13px;font-weight:700;opacity:0.8">' + type + '</span>';
-  const btnL = document.createElement('button');
-  btnL.textContent = '↺';
-  btnL.style.cssText = 'background:#444;border:none;border-radius:8px;color:#fff;font-size:20px;padding:8px 16px;cursor:pointer';
-  btnL.onclick = () => rotateFs(-90);
-  const btnR = document.createElement('button');
-  btnR.textContent = '↻';
-  btnR.style.cssText = 'background:#444;border:none;border-radius:8px;color:#fff;font-size:20px;padding:8px 16px;cursor:pointer';
-  btnR.onclick = () => rotateFs(90);
-  const btnSave = document.createElement('button');
-  btnSave.textContent = '💾 保存';
-  btnSave.style.cssText = 'background:var(--accent);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer';
-  btnSave.onclick = () => saveFsPhoto();
-  const btnClose = document.createElement('button');
-  btnClose.textContent = '✕ 閉じる';
-  btnClose.style.cssText = 'background:#666;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer';
-  btnClose.onclick = () => closePhotoFullscreen();
-  btnArea.appendChild(btnL);
-  btnArea.appendChild(btnR);
-  btnArea.appendChild(btnSave);
-  btnArea.appendChild(btnClose);
-  const imgWrap = document.createElement('div');
-  imgWrap.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%';
-  const imgEl = document.createElement('img');
-  imgEl.id = 'fsPhoto';
-  imgEl.src = src;
-  imgEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center';
-  imgWrap.appendChild(imgEl);
-  div.appendChild(btnArea);
-  div.appendChild(imgWrap);
-  document.body.appendChild(div);
-}
-
-function rotateFs(deg) {
-  _fsRotation = (_fsRotation + deg + 360) % 360;
-  const img = document.getElementById('fsPhoto');
-  if (img) img.style.transform = 'rotate(' + _fsRotation + 'deg)';
-}
-
-async function saveFsPhoto() {
-  const img = document.getElementById('fsPhoto');
-  if (!img) return;
-  if (_fsRotation === 0) { closePhotoFullscreen(); return; }
-  // canvasで回転して新しいbase64を生成
-  const rad = _fsRotation * Math.PI / 180;
-  const sin = Math.abs(Math.sin(rad));
-  const cos = Math.abs(Math.cos(rad));
-  const sw = img.naturalWidth, sh = img.naturalHeight;
-  const cw = Math.round(sw * cos + sh * sin);
-  const ch = Math.round(sw * sin + sh * cos);
-  const canvas = document.createElement('canvas');
-  canvas.width = cw; canvas.height = ch;
-  const ctx = canvas.getContext('2d');
-  ctx.translate(cw / 2, ch / 2);
-  ctx.rotate(rad);
-  ctx.drawImage(img, -sw / 2, -sh / 2);
-  const newSrc = canvas.toDataURL('image/jpeg', 0.85);
-  // Supabaseの写真を更新
-  if (sb && _fsPhotoId) {
-    try {
-      const { error } = await sb.from(DB_TABLES.PHOTOS).update({ photo_b64: newSrc }).eq('id', _fsPhotoId);
-      if (error) throw error;
-      showToast('✅ 保存しました', 'success');
-      // 一覧の画像も更新
-      document.querySelectorAll('img').forEach(el => {
-        if (el.src === img.src) { el.src = newSrc; }
-      });
-    } catch(e) { showToast('保存失敗: ' + e.message, 'error'); }
-  }
-  closePhotoFullscreen();
+function openPhotoFullscreen(src, type) {
+  document.body.insertAdjacentHTML('beforeend', `
+  <div id="photoFullscreen" onclick="closePhotoFullscreen()"
+    style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out">
+    <div style="color:#fff;font-size:13px;font-weight:700;margin-bottom:12px;opacity:0.8">${type} — タップして閉じる</div>
+    <img src="${src}" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
+  </div>`);
 }
 
 function closePhotoFullscreen() {
   document.getElementById('photoFullscreen')?.remove();
-  _fsRotation = 0;
-  _fsPhotoId  = null;
 }
 
 function openManageModal(id) {
@@ -2111,7 +1977,6 @@ function initApp() {
   updateNumDisplay();
   renderAllChecklists();
   renderCarRepairItems();
-  renderFreezerItems();
   renderInsuranceSelect();
 
   renderMechSelect('mechSelectRepair');
