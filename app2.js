@@ -124,7 +124,7 @@ async function sbSaveOrder(order) {
       saved_at: order.savedAt,
       nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
       nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
-      planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false,
+      planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false, record_done: order.recordDone||false,
     });
     if (error) throw error;
     return true;
@@ -156,7 +156,7 @@ async function sbLoadOrders() {
       skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at,
       nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
       nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
-      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false,
+      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false, recordDone: row.record_done || false,
     }));
   } catch(e) { console.log('Supabase読み込みエラー:', e); return null; }
 }
@@ -464,19 +464,11 @@ function setPreventOkNg(label, val) {
 // ─── 修理タイプ切り替え ───────────────────────────────────────
 let repairType = 'car';
 
-// ─── 冷凍機 ───────────────────────────────────────────────────
-const DEF_FREEZER_REPAIR = [
-  'コンプレッサー交換','エアコンホース交換','ブロアモーター交換',
-  'コンデンサーモーター交換','エアコンガス補充','レシーバー交換',
-  'コンデンサー交換','コンデンサー清掃','ガス漏れ点検',
-];
+const DEF_FREEZER_REPAIR = ['コンプレッサー交換','エアコンホース交換','ブロアモーター交換','コンデンサーモーター交換','エアコンガス補充','レシーバー交換','コンデンサー交換','コンデンサー清掃','ガス漏れ点検'];
 let freezerWorkshop = '';
 let freezerCheckState = {};
 
-function setFreezerWorkshop(w) {
-  freezerWorkshop = freezerWorkshop === w ? '' : w;
-  renderFreezerItems();
-}
+function setFreezerWorkshop(w) { freezerWorkshop = freezerWorkshop===w?'':w; renderFreezerItems(); }
 function renderFreezerItems() {
   const ws = ['DENSO','菱重','トプレック','サーモキング','自社'];
   const we = document.getElementById('repair-freezer-workshop');
@@ -496,7 +488,7 @@ function renderFreezerItems() {
   DEF_FREEZER_REPAIR.forEach(function(label) {
     const checked = freezerCheckState[label] || false;
     const d = document.createElement('div');
-    d.className = 'check-item' + (checked ? ' checked' : '');
+    d.className = 'check-item' + (checked?' checked':'');
     d.innerHTML = '<span>'+(checked?'✅':'⬜')+'</span><span>'+label+'</span>';
     d.onclick = function() { freezerCheckState[label] = !freezerCheckState[label]; renderFreezerItems(); };
     c.appendChild(d);
@@ -1122,6 +1114,9 @@ async function loadList() {
     const isUntaken = isToday && !o.mechName;
     const takeBtn = isUntaken ? `<button onclick="event.stopPropagation();takeOrder('${o.id}')" style="background:var(--accent);border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;flex-shrink:0">✋ やります</button>` : '';
     const invoiceBadge = o.invoiceDone ? `<span style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📄 請求書済</span>` : '';
+    const is3month = [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
+    const recordBadge = is3month && !o.recordDone ? `<span style="background:#3a2000;color:#d0b040;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📋 記録簿未</span>` : '';
+    const recordDoneBadge = is3month && o.recordDone ? `<span style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📋 記録簿済</span>` : '';
     const rowStyle = isPast ? 'border-left:4px solid #cc4444;background:rgba(200,60,60,0.08);' : isToday ? 'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);' : isTomorrow ? 'border-left:4px solid #4488ff;background:rgba(68,136,255,0.08);' : '';
     const prefix = isPast ? '⚠️ ' : isToday ? '🔥 ' : isTomorrow ? '🔔 ' : '';
     return `<div class="order-item" onclick="showDetail('${o.id}')" style="${rowStyle}">
@@ -1130,6 +1125,8 @@ async function loadList() {
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${partsBadge}
           ${invoiceBadge}
+          ${recordBadge}
+          ${recordDoneBadge}
           ${takeBtn}
           <span class="badge badge-${o.status}">${o.status}</span>
         </div>
@@ -1243,6 +1240,7 @@ async function openShijishoView(order) {
         <button class="btn btn-ok btn-sm" onclick="openAddPhotoModal('${order.id}')">📷 写真追加</button>
         <button class="btn btn-info btn-sm" onclick="openEditModal('${order.id}')">✏️ 編集</button>
         <button class="btn btn-gray btn-sm" onclick="openManageModal('${order.id}')">⚙️ 管理</button>
+        ${[...(order.carItems||[]),...(order.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月')) ? '<button class="btn btn-sm" style="background:'+( order.recordDone?'#1a3a1a':'#2a2200')+';color:'+(order.recordDone?'#40d070':'#d0b040')+';border:none;" onclick="toggleRecordDone(\'' + order.id + '\')">📋 '+(order.recordDone?'記録簿済':'記録簿未')+'</button>' : ''}
         <button class="btn btn-primary btn-sm" style="background:#06c755" onclick="sendLineReport('${order.id}')">💬 LINE</button>
         <button class="btn btn-primary btn-sm" onclick="closeShijishoView()">✕</button>
       </div>
@@ -1346,20 +1344,14 @@ function openPhotoFullscreen(src, type, photoId) {
   btnClose.textContent = '✕ 閉じる';
   btnClose.style.cssText = 'background:#666;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer';
   btnClose.onclick = () => closePhotoFullscreen();
-  btnArea.appendChild(label);
-  btnArea.appendChild(btnL);
-  btnArea.appendChild(btnR);
-  btnArea.appendChild(btnSave);
-  btnArea.appendChild(btnClose);
+  btnArea.appendChild(label); btnArea.appendChild(btnL); btnArea.appendChild(btnR); btnArea.appendChild(btnSave); btnArea.appendChild(btnClose);
   const imgWrap = document.createElement('div');
   imgWrap.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%';
   const imgEl = document.createElement('img');
-  imgEl.id = 'fsPhoto';
-  imgEl.src = src;
+  imgEl.id = 'fsPhoto'; imgEl.src = src;
   imgEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center';
   imgWrap.appendChild(imgEl);
-  div.appendChild(btnArea);
-  div.appendChild(imgWrap);
+  div.appendChild(btnArea); div.appendChild(imgWrap);
   document.body.appendChild(div);
 }
 
@@ -1374,17 +1366,14 @@ async function saveFsPhoto() {
   if (!img) return;
   if (_fsRotation === 0) { closePhotoFullscreen(); return; }
   const rad = _fsRotation * Math.PI / 180;
-  const sin = Math.abs(Math.sin(rad));
-  const cos = Math.abs(Math.cos(rad));
+  const sin = Math.abs(Math.sin(rad)), cos = Math.abs(Math.cos(rad));
   const sw = img.naturalWidth, sh = img.naturalHeight;
-  const cw = Math.round(sw * cos + sh * sin);
-  const ch = Math.round(sw * sin + sh * cos);
+  const cw = Math.round(sw*cos+sh*sin), ch = Math.round(sw*sin+sh*cos);
   const canvas = document.createElement('canvas');
   canvas.width = cw; canvas.height = ch;
   const ctx = canvas.getContext('2d');
-  ctx.translate(cw / 2, ch / 2);
-  ctx.rotate(rad);
-  ctx.drawImage(img, -sw / 2, -sh / 2);
+  ctx.translate(cw/2, ch/2); ctx.rotate(rad);
+  ctx.drawImage(img, -sw/2, -sh/2);
   const newSrc = canvas.toDataURL('image/jpeg', 0.85);
   if (sb && _fsPhotoId) {
     try {
@@ -1399,8 +1388,7 @@ async function saveFsPhoto() {
 
 function closePhotoFullscreen() {
   document.getElementById('photoFullscreen')?.remove();
-  _fsRotation = 0;
-  _fsPhotoId  = null;
+  _fsRotation = 0; _fsPhotoId = null;
 }
 
 function openManageModal(id) {
@@ -1917,6 +1905,18 @@ async function saveAddedPhotos(orderId) {
     const order=S.orders.find(o=>o.id===orderId);
     if(order){closeShijishoView();openShijishoView(order);}
   } catch(e) { showToast('保存失敗: '+e.message,'error'); }
+}
+
+async function toggleRecordDone(id) {
+  const order = S.orders.find(o => o.id === id);
+  if (!order) return;
+  order.recordDone = !order.recordDone;
+  saveState();
+  await sbSaveOrder(order);
+  showToast(order.recordDone ? '📋 記録簿作成済みにしました' : '記録簿未に戻しました', 'success');
+  closeShijishoView();
+  openShijishoView(order);
+  loadList();
 }
 
 function changeStatus(id,status) {
