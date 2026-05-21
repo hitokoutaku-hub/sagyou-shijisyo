@@ -1240,6 +1240,7 @@ async function openShijishoView(order) {
         <button class="btn btn-ok btn-sm" onclick="openAddPhotoModal('${order.id}')">📷 写真追加</button>
         <button class="btn btn-info btn-sm" onclick="openEditModal('${order.id}')">✏️ 編集</button>
         <button class="btn btn-gray btn-sm" onclick="openManageModal('${order.id}')">⚙️ 管理</button>
+        <button class="btn btn-sm" style="background:${order.invoiceDone?'#1a3a1a':'#2a2200'};color:${order.invoiceDone?'#40d070':'#d0b040'};border:none;" onclick="toggleInvoiceDone('${order.id}')">📄 ${order.invoiceDone?'請求書済':'請求書未'}</button>
         ${[...(order.carItems||[]),...(order.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月')) ? '<button class="btn btn-sm" style="background:'+( order.recordDone?'#1a3a1a':'#2a2200')+';color:'+(order.recordDone?'#40d070':'#d0b040')+';border:none;" onclick="toggleRecordDone(\'' + order.id + '\')">📋 '+(order.recordDone?'記録簿済':'記録簿未')+'</button>' : ''}
         <button class="btn btn-primary btn-sm" style="background:#06c755" onclick="sendLineReport('${order.id}')">💬 LINE</button>
         <button class="btn btn-primary btn-sm" onclick="closeShijishoView()">✕</button>
@@ -1905,6 +1906,18 @@ async function saveAddedPhotos(orderId) {
     const order=S.orders.find(o=>o.id===orderId);
     if(order){closeShijishoView();openShijishoView(order);}
   } catch(e) { showToast('保存失敗: '+e.message,'error'); }
+}
+
+async function toggleInvoiceDone(id) {
+  const order = S.orders.find(o => o.id === id);
+  if (!order) return;
+  order.invoiceDone = !order.invoiceDone;
+  saveState();
+  await sbSaveOrder(order);
+  showToast(order.invoiceDone ? '📄 請求書作成済みにしました' : '請求書未に戻しました', 'success');
+  closeShijishoView();
+  openShijishoView(order);
+  loadList();
 }
 
 async function toggleRecordDone(id) {
