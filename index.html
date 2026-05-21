@@ -166,19 +166,14 @@
   <div class="panel" id="panel-list">
     <div class="card" style="padding:10px">
       <div class="filter-bar">
-        <input type="text" id="filterKeyword" placeholder="🔍 顧客名・車名・ナンバー" onkeyup="loadList()" style="flex:2;min-width:160px;font-size:14px">
+        <input type="text" id="filterKeyword" placeholder="🔍 顧客名・車名・作業内容など" onkeyup="loadList()" style="flex:2;min-width:160px;font-size:14px">
         <button class="btn btn-sm btn-gray" onclick="clearFilter()">全件</button>
       </div>
       <div class="filter-bar" style="margin-top:6px">
         <select id="filterMonth" onchange="loadList()" style="flex:1;min-width:120px"><option value="">全月</option></select>
         <select id="filterStatus" onchange="loadList()">
           <option value="">全ステータス</option>
-          <option>入庫待ち</option>
-          <option>入庫中</option>
-          <option>作業中</option>
-          <option>完了</option>
-          <option>引渡済</option>
-          <option>車検中</option>
+          <option>入庫待ち</option><option>入庫中</option><option>作業中</option><option>完了</option><option>引渡済</option><option>車検中</option>
         </select>
         <select id="filterType" onchange="loadList()">
           <option value="">全種別</option>
@@ -444,6 +439,6 @@
 </div>
 
 <script src="auth.js?v=1"></script>
-<script src="app2.js?v=3"></script>
+<script src="app2.js?v=4"></script>
 </body>
 </html>
