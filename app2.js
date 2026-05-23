@@ -124,7 +124,7 @@ async function sbSaveOrder(order) {
       saved_at: order.savedAt,
       nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
       nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
-      planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false, record_done: order.recordDone||false,
+      planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false, record_done: order.recordDone||false, bookmarked: order.bookmarked||false,
     });
     if (error) throw error;
     return true;
@@ -156,7 +156,7 @@ async function sbLoadOrders() {
       skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at,
       nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
       nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
-      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false, recordDone: row.record_done || false,
+      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false, recordDone: row.record_done || false, bookmarked: row.bookmarked || false,
     }));
   } catch(e) { console.log('Supabase読み込みエラー:', e); return null; }
 }
@@ -1075,6 +1075,13 @@ async function loadList() {
   if(filterMonth)   orders=orders.filter(o=>(o.dateIn||o.savedAt||'').startsWith(filterMonth));
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
+  const filterExtra = document.getElementById('filterExtra')?.value;
+  if(filterExtra==='bookmark') orders=orders.filter(o=>o.bookmarked);
+  if(filterExtra==='noInvoice') orders=orders.filter(o=>!o.invoiceDone);
+  if(filterExtra==='noRecord') orders=orders.filter(o=>{
+    const is3m = [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
+    return is3m && !o.recordDone;
+  });
   if(filterKeyword) orders=orders.filter(o=>
     (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
     (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword));
@@ -1114,6 +1121,7 @@ async function loadList() {
     const isUntaken = isToday && !o.mechName;
     const takeBtn = isUntaken ? `<button onclick="event.stopPropagation();takeOrder('${o.id}')" style="background:var(--accent);border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;flex-shrink:0">✋ やります</button>` : '';
     const invoiceBadge = o.invoiceDone ? `<span style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📄 請求書済</span>` : '';
+    const bookmarkBadge = o.bookmarked ? `<span style="background:#2a1a5a;color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">⭐</span>` : '';
     const is3month = [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
     const recordBadge = is3month && !o.recordDone ? `<span style="background:#3a2000;color:#d0b040;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📋 記録簿未</span>` : '';
     const recordDoneBadge = is3month && o.recordDone ? `<span style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📋 記録簿済</span>` : '';
@@ -1123,6 +1131,7 @@ async function loadList() {
       <div class="top">
         <span class="order-num">${prefix}${o.orderNum||'（番号なし）'}</span>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          ${bookmarkBadge}
           ${partsBadge}
           ${invoiceBadge}
           ${recordBadge}
@@ -1237,6 +1246,7 @@ async function openShijishoView(order) {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span class="badge badge-${order.status}" style="font-size:13px;padding:5px 14px">${order.status}</span>
         ${joinBtn}
+        <button class="btn btn-sm" style="background:${order.bookmarked?'#2a1a5a':'var(--border)'};color:${order.bookmarked?'#c4b5fd':'var(--text)'};border:none;" onclick="toggleBookmark('${order.id}')">${order.bookmarked?'⭐ 済':'☆ ブックマーク'}</button>
         <button class="btn btn-ok btn-sm" onclick="openAddPhotoModal('${order.id}')">📷 写真追加</button>
         <button class="btn btn-info btn-sm" onclick="openEditModal('${order.id}')">✏️ 編集</button>
         <button class="btn btn-gray btn-sm" onclick="openManageModal('${order.id}')">⚙️ 管理</button>
@@ -1906,6 +1916,18 @@ async function saveAddedPhotos(orderId) {
     const order=S.orders.find(o=>o.id===orderId);
     if(order){closeShijishoView();openShijishoView(order);}
   } catch(e) { showToast('保存失敗: '+e.message,'error'); }
+}
+
+async function toggleBookmark(id) {
+  const order = S.orders.find(o => o.id === id);
+  if (!order) return;
+  order.bookmarked = !order.bookmarked;
+  saveState();
+  await sbSaveOrder(order);
+  showToast(order.bookmarked ? '⭐ ブックマークしました' : 'ブックマークを解除しました', 'success');
+  closeShijishoView();
+  openShijishoView(order);
+  loadList();
 }
 
 async function toggleInvoiceDone(id) {
