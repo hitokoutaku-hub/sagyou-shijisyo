@@ -1120,11 +1120,15 @@ async function loadList() {
     const isPast = (o.dateIn||'')!=='' && (o.dateIn||'')<_today && o.status!=='完了' && o.status!=='引渡済';
     const isUntaken = isToday && !o.mechName;
     const takeBtn = isUntaken ? `<button onclick="event.stopPropagation();takeOrder('${o.id}')" style="background:var(--accent);border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;flex-shrink:0">✋ やります</button>` : '';
-    const invoiceBadge = o.invoiceDone ? `<span style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📄 請求書済</span>` : '';
+    const invoiceBadge = o.invoiceDone
+      ? `<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">📄 請求書済</span>`
+      : `<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#2a2200;color:#d0b040;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">📄 請求書未</span>`;
     const bookmarkBadge = o.bookmarked ? `<span style="background:#2a1a5a;color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">⭐</span>` : '';
     const is3month = [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
-    const recordBadge = is3month && !o.recordDone ? `<span style="background:#3a2000;color:#d0b040;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📋 記録簿未</span>` : '';
-    const recordDoneBadge = is3month && o.recordDone ? `<span style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">📋 記録簿済</span>` : '';
+    const recordBadge = is3month && !o.recordDone
+      ? `<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#3a2000;color:#d0b040;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">📋 記録簿未</span>` : '';
+    const recordDoneBadge = is3month && o.recordDone
+      ? `<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">📋 記録簿済</span>` : '';
     const rowStyle = isPast ? 'border-left:4px solid #cc4444;background:rgba(200,60,60,0.08);' : isToday ? 'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);' : isTomorrow ? 'border-left:4px solid #4488ff;background:rgba(68,136,255,0.08);' : '';
     const prefix = isPast ? '⚠️ ' : isToday ? '🔥 ' : isTomorrow ? '🔔 ' : '';
     return `<div class="order-item" onclick="showDetail('${o.id}')" style="${rowStyle}">
@@ -1916,6 +1920,26 @@ async function saveAddedPhotos(orderId) {
     const order=S.orders.find(o=>o.id===orderId);
     if(order){closeShijishoView();openShijishoView(order);}
   } catch(e) { showToast('保存失敗: '+e.message,'error'); }
+}
+
+async function toggleInvoiceDoneList(id) {
+  const order = S.orders.find(o => o.id === id);
+  if (!order) return;
+  order.invoiceDone = !order.invoiceDone;
+  saveState();
+  await sbSaveOrder(order);
+  showToast(order.invoiceDone ? '📄 請求書済にしました' : '📄 請求書未に戻しました', 'success');
+  loadList();
+}
+
+async function toggleRecordDoneList(id) {
+  const order = S.orders.find(o => o.id === id);
+  if (!order) return;
+  order.recordDone = !order.recordDone;
+  saveState();
+  await sbSaveOrder(order);
+  showToast(order.recordDone ? '📋 記録簿済にしました' : '📋 記録簿未に戻しました', 'success');
+  loadList();
 }
 
 async function toggleBookmark(id) {
