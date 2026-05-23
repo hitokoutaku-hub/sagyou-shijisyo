@@ -183,6 +183,14 @@
         </select>
         <button class="btn btn-sm btn-primary" onclick="loadList()">🔄</button>
       </div>
+      <div class="filter-bar" style="margin-top:6px">
+        <select id="filterExtra" onchange="loadList()" style="flex:1">
+          <option value="">絞り込みなし</option>
+          <option value="bookmark">⭐ ブックマーク</option>
+          <option value="noInvoice">📄 請求書未</option>
+          <option value="noRecord">📋 記録簿未</option>
+        </select>
+      </div>
       <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub)">
         <span class="sync-dot" id="syncDot2"></span>
         <span id="listSyncLabel">読み込み中...</span>
@@ -439,6 +447,6 @@
 </div>
 
 <script src="auth.js?v=1"></script>
-<script src="app2.js?v=5"></script>
+<script src="app2.js?v=6"></script>
 </body>
 </html>
