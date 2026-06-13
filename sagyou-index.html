@@ -10,11 +10,11 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
-  --bg: #1e2235; --card: #2a3050; --card2: #323a5a;
-  --accent: #f5aa35; --accent2: #ffd080; --accentL: rgba(245,170,53,0.18);
-  --text: #f5f7ff; --sub: #9aaac8; --border: #3d4d70;
-  --danger: #e04040; --ok: #30b060; --info: #4a90e0;
-  --radius: 12px; --shadow: 0 4px 20px rgba(0,0,0,.4);
+  --bg: #f1f4f8; --card: #ffffff; --card2: #f8f9fc;
+  --accent: #f97316; --accent2: #fb923c; --accentL: rgba(249,115,22,0.12);
+  --text: #1a1f2e; --sub: #64748b; --border: #e2e8f0;
+  --danger: #ef4444; --ok: #22c55e; --info: #3b82f6;
+  --radius: 12px; --shadow: 0 2px 12px rgba(0,0,0,.08);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
@@ -76,11 +76,11 @@ padding: 12px; text-align: center; margin-bottom: 12px; }
 
 /* STATUS BADGE */
 .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-.badge-入庫中 { background: #243870; color: #80aaff; }
-.badge-作業中 { background: #4a2e00; color: var(--accent); }
-.badge-完了 { background: #18402a; color: #55e085; }
-.badge-引渡済 { background: #383838; color: #aaa; }
-.badge-車検中 { background: #3a1560; color: #d090ff; }
+.badge-入庫中 { background: #dbeafe; color: #1d4ed8; }
+.badge-作業中 { background: #fff7ed; color: #c2410c; }
+.badge-完了 { background: #dcfce7; color: #15803d; }
+.badge-引渡済 { background: #f1f5f9; color: #64748b; }
+.badge-車検中 { background: #f3e8ff; color: #7e22ce; }
 
 /* CHECKLIST */
 .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-top: 8px; }
@@ -89,12 +89,12 @@ background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; cu
 .check-item.checked { border-color: var(--accent); background: var(--accentL); color: var(--accent); font-weight: 600; }
 
 /* ORDER LIST */
-.order-item { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius);
+.order-item { background: #ffffff; border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 padding: 13px; margin-bottom: 8px; cursor: pointer; transition: .12s; }
 .order-item:active { border-color: var(--accent); background: var(--card2); }
 .order-item .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .order-num { color: var(--accent); font-weight: 800; font-size: 15px; }
-.order-info { color: #c8d4ee; font-size: 13px; line-height: 1.6; }
+.order-info { color: #475569; font-size: 13px; line-height: 1.6; }
 
 /* STAFF TAG */
 .staff-tag { display: inline-flex; align-items: center; gap: 6px; background: var(--card2);
