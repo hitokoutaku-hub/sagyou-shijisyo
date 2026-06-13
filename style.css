@@ -3,18 +3,18 @@
    ============================================================ */
 
 :root {
-  --bg:      #1e2235;
-  --card:    #2a3050;
-  --card2:   #323a5a;
-  --accent:  #f5aa35;
-  --accent2: #ffd080;
-  --accentL: rgba(245,170,53,0.18);
-  --text:    #f0f2f8;
-  --sub:     #9aaac8;
-  --border:  #3d4d70;
-  --danger:  #e04040;
-  --ok:      #30b060;
-  --info:    #4a90e0;
+  --bg:      #f1f4f8;
+  --card:    #ffffff;
+  --card2:   #f8f9fc;
+  --accent:  #f97316;
+  --accent2: #fb923c;
+  --accentL: rgba(249,115,22,0.12);
+  --text:    #1a1f2e;
+  --sub:     #64748b;
+  --border:  #e2e8f0;
+  --danger:  #ef4444;
+  --ok:      #22c55e;
+  --info:    #3b82f6;
   --owner:   #c070ff;
   --ownerL:  rgba(192,112,255,0.15);
   --radius:  12px;
