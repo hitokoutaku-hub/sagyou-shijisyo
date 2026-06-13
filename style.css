@@ -3,18 +3,18 @@
    ============================================================ */
 
 :root {
-  --bg:      #0f1117;
-  --card:    #1a1e2e;
-  --card2:   #222840;
-  --accent:  #f0a030;
+  --bg:      #1e2235;
+  --card:    #2a3050;
+  --card2:   #323a5a;
+  --accent:  #f5aa35;
   --accent2: #ffd080;
-  --accentL: rgba(240,160,48,0.15);
+  --accentL: rgba(245,170,53,0.18);
   --text:    #f0f2f8;
-  --sub:     #7080a0;
-  --border:  #2a3050;
+  --sub:     #9aaac8;
+  --border:  #3d4d70;
   --danger:  #e04040;
   --ok:      #30b060;
-  --info:    #3080e0;
+  --info:    #4a90e0;
   --owner:   #c070ff;
   --ownerL:  rgba(192,112,255,0.15);
   --radius:  12px;
@@ -563,9 +563,19 @@ textarea.lg { min-height: 180px; }
 .gas-wait { background: #2a2200; color: #d0b040; border: 1px solid #a08030;       display: block; }
 
 /* ─── レスポンシブ ──────────────────────────────────────────── */
-@media (max-width: 480px) {
+@media (max-width: 600px) {
+  /* 50代・スマホ向け：文字大きく・タップしやすく */
+  body { font-size: 17px; line-height: 1.7; }
   .row2, .row3 { grid-template-columns: 1fr; }
-  .check-grid  { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
-  .tabs        { grid-template-columns: repeat(5, 1fr); }
-  .tab         { font-size: 10px; padding: 8px 2px; }
+  .check-grid  { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+
+  /* ログイン画面 */
+  #login-screen { padding: 28px 20px; }
+  .login-box { padding: 28px 20px; }
+  .login-title { font-size: 22px; }
+  .login-input { font-size: 18px; padding: 16px 14px; }
+  .login-btn { font-size: 18px; padding: 18px; min-height: 58px; }
+
+  /* スタッフ選択ボタン */
+  .staff-select-btn { font-size: 18px; padding: 18px 16px; min-height: 60px; }
 }
