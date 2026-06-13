@@ -511,6 +511,11 @@ textarea.lg { min-height: 180px; }
 .rank-3 { background: #c08040; color: #fff; }
 
 /* ─── 全画面入力 ────────────────────────────────────────────── */
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; overflow-y: auto; align-items: flex-start; justify-content: center; padding: 24px 16px; }
+.modal-bg.open { display: flex; }
+.modal { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; width: 100%; max-width: 400px; margin: auto; }
+.modal-title { color: var(--accent); font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+
 .fs-modal { display: none; position: fixed; inset: 0; z-index: 300; background: var(--bg); flex-direction: column; }
 .fs-modal.open { display: flex; }
 .fs-header {
@@ -590,15 +595,4 @@ textarea.lg { min-height: 180px; }
   .check-item { padding: 14px 12px; font-size: 16px; border-width: 2px; min-height: 52px; }
 
   .modal { padding: 20px 16px; border-radius: 16px; }
-  .modal-title { font-size: 19px; }
-  .detail-grid { grid-template-columns: 1fr; gap: 10px; }
-  .detail-item .dt-val { font-size: 17px; }
-
-  .staff-tag { font-size: 15px; padding: 9px 16px; }
-  .staff-select-btn { font-size: 18px; padding: 18px 16px; min-height: 60px; margin-bottom: 10px; }
-
-  .sk-item { padding: 12px 0; }
-  .sk-item-label { font-size: 16px; }
-  .sk-btn { padding: 10px 14px; font-size: 14px; min-height: 44px; }
-  .empty { font-size: 16px; padding: 40px 20px; }
-}
+  .modal-
