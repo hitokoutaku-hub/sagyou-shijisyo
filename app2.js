@@ -2194,4 +2194,15 @@ function initApp() {
     }
     // tab-list をアクティブに
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    
+    const tl = document.getElementById('tab-list');
+    if (tl) tl.classList.add('active');
+    loadList();
+  }, 600);
+
+  const today=new Date().toISOString().split('T')[0];
+  ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
+}
+
+// ─── 起動 ─────────────────────────────────────────────────────
+initSupabase();
+initAuth();
