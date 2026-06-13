@@ -10,10 +10,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
-  --bg: #0f1117; --card: #1a1e2e; --card2: #222840;
-  --accent: #f0a030; --accent2: #ffd080; --accentL: rgba(240,160,48,0.15);
-  --text: #f0f2f8; --sub: #7080a0; --border: #2a3050; 
-  --danger: #e04040; --ok: #30b060; --info: #3080e0;
+  --bg: #1e2235; --card: #2a3050; --card2: #323a5a;
+  --accent: #f5aa35; --accent2: #ffd080; --accentL: rgba(245,170,53,0.18);
+  --text: #f5f7ff; --sub: #9aaac8; --border: #3d4d70;
+  --danger: #e04040; --ok: #30b060; --info: #4a90e0;
   --radius: 12px; --shadow: 0 4px 20px rgba(0,0,0,.4);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -76,11 +76,11 @@ padding: 12px; text-align: center; margin-bottom: 12px; }
 
 /* STATUS BADGE */
 .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-.badge-入庫中 { background: #1a2d5a; color: #6090ff; }
-.badge-作業中 { background: #3a2000; color: var(--accent); }
-.badge-完了 { background: #0d2e1a; color: #40d070; }
-.badge-引渡済 { background: #222; color: #888; }
-.badge-車検中 { background: #2a0a4a; color: #c070ff; }
+.badge-入庫中 { background: #243870; color: #80aaff; }
+.badge-作業中 { background: #4a2e00; color: var(--accent); }
+.badge-完了 { background: #18402a; color: #55e085; }
+.badge-引渡済 { background: #383838; color: #aaa; }
+.badge-車検中 { background: #3a1560; color: #d090ff; }
 
 /* CHECKLIST */
 .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-top: 8px; }
@@ -89,12 +89,12 @@ background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; cu
 .check-item.checked { border-color: var(--accent); background: var(--accentL); color: var(--accent); font-weight: 600; }
 
 /* ORDER LIST */
-.order-item { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+.order-item { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius);
 padding: 13px; margin-bottom: 8px; cursor: pointer; transition: .12s; }
 .order-item:active { border-color: var(--accent); background: var(--card2); }
 .order-item .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .order-num { color: var(--accent); font-weight: 800; font-size: 15px; }
-.order-info { color: var(--sub); font-size: 13px; line-height: 1.6; }
+.order-info { color: #c8d4ee; font-size: 13px; line-height: 1.6; }
 
 /* STAFF TAG */
 .staff-tag { display: inline-flex; align-items: center; gap: 6px; background: var(--card2);
@@ -169,6 +169,117 @@ background: var(--card2); border: 1px solid var(--border); border-radius: 6px;
 color: var(--sub); font-size: 14px; padding: 4px 8px; cursor: pointer; pointer-events: all; }
 .inp-wrap { position: relative; }
 .inp-wrap input { padding-right: 44px; }
+
+/* ========== スマホ・50代向け最適化 ========== */
+@media (max-width: 600px) {
+
+  /* ── ベース：文字を大きく、行間を広く ── */
+  body { font-size: 17px; line-height: 1.7; }
+  #app { padding: 8px 12px; }
+
+  /* ── ヘッダー ── */
+  .header { padding: 12px 4px 10px; }
+  .header h1 { font-size: 18px; }
+  .sync-badge { font-size: 13px; }
+
+  /* ── タブ：横スクロール・大きくタップしやすく ── */
+  .tabs {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 6px;
+    padding-bottom: 6px;
+    scrollbar-width: none;
+    margin-bottom: 12px;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: 0 0 auto;
+    min-width: 76px;
+    min-height: 52px;
+    padding: 12px 10px;
+    font-size: 14px;
+    white-space: nowrap;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── カード ── */
+  .card { padding: 16px 14px; border-radius: 12px; margin-bottom: 12px; }
+  .card-title { font-size: 17px; margin-bottom: 14px; padding-bottom: 10px; gap: 8px; }
+
+  /* ── フォーム ── */
+  .row2, .row3 { grid-template-columns: 1fr; gap: 12px; }
+  label { font-size: 14px; margin-top: 16px; margin-bottom: 6px; letter-spacing: 0; }
+  input, select, textarea {
+    font-size: 18px;
+    padding: 16px 14px;
+    border-radius: 12px;
+    border-width: 2px;
+    line-height: 1.6;
+  }
+  textarea { min-height: 120px; }
+
+  /* ── 指示書番号 ── */
+  .order-num-display .num { font-size: 26px; }
+  .order-num-display .label { font-size: 13px; }
+
+  /* ── 一覧カード：大きく・余白たっぷり ── */
+  .order-item {
+    padding: 18px 14px;
+    margin-bottom: 12px;
+    border-radius: 14px;
+    border-width: 2px;
+  }
+  .order-item .top { margin-bottom: 10px; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+  .order-num { font-size: 18px; line-height: 1.4; }
+  .order-info { font-size: 16px; line-height: 2.0; color: #dce8ff; }
+
+  /* ── バッジ：大きく ── */
+  .badge { font-size: 13px; padding: 5px 13px; border-radius: 20px; }
+
+  /* ── ボタン：指で押しやすく ── */
+  .btn { padding: 16px 20px; font-size: 17px; border-radius: 12px; min-height: 54px; }
+  .btn-sm { padding: 12px 16px; font-size: 15px; min-height: 46px; }
+  .btn-row { gap: 10px; margin-top: 16px; }
+
+  /* ── チェックリスト ── */
+  .check-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .check-item { padding: 14px 12px; font-size: 16px; border-width: 2px; border-radius: 10px; min-height: 52px; }
+
+  /* ── モーダル ── */
+  .modal { padding: 20px 16px; border-radius: 16px; }
+  .modal-title { font-size: 19px; margin-bottom: 16px; }
+  .detail-grid { grid-template-columns: 1fr; gap: 10px; }
+  .detail-item .dt-label { font-size: 13px; }
+  .detail-item .dt-val { font-size: 17px; }
+
+  /* ── フィルターバー ── */
+  .filter-bar { gap: 8px; }
+  .filter-bar input, .filter-bar select {
+    font-size: 16px;
+    padding: 14px 12px;
+    border-radius: 10px;
+  }
+
+  /* ── スタッフタグ ── */
+  .staff-tag { font-size: 15px; padding: 9px 16px; }
+  .staff-tag button { font-size: 20px; }
+
+  /* ── 車検・各種ボタン ── */
+  .sk-item { padding: 12px 0; }
+  .sk-item-label { font-size: 16px; }
+  .sk-btn { padding: 10px 14px; font-size: 14px; min-height: 44px; }
+  .staff-select-btn { padding: 18px 16px; font-size: 17px; min-height: 58px; margin-bottom: 10px; }
+
+  /* ── empty状態 ── */
+  .empty { font-size: 16px; padding: 40px 20px; }
+
+  /* ── ガスメッセージ ── */
+  .gas-msg { font-size: 15px; padding: 14px 16px; }
+}
 </style>
 </head>
 <body>
