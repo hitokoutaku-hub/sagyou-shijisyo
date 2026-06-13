@@ -14,7 +14,7 @@
 
 <div id="app">
   <div class="header">
-    <h1>🔧 整備指示書</h1>
+    <h1 style="font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🔧 整備指示書</h1>
     <div class="header-right">
       <div class="sync-badge">
         <span class="sync-dot" id="syncDot"></span>
@@ -154,34 +154,42 @@
       <div id="subStaffArea"></div>
     </div>
 
-    <div class="card">
-      <div class="card-title">✅ 依頼事項</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px">
-        <button id="r-tab-car"     class="btn btn-primary btn-sm" onclick="switchRepairType('car')">🚗 乗用車</button>
-        <button id="r-tab-truck"   class="btn btn-gray btn-sm"    onclick="switchRepairType('truck')">🚛 トラック</button>
-        <button id="r-tab-aircon"  class="btn btn-gray btn-sm"    onclick="switchRepairType('aircon')">❄️ エアコン</button>
-        <button id="r-tab-freezer" class="btn btn-gray btn-sm"    onclick="switchRepairType('freezer')">🧊 冷凍機</button>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="card-title" onclick="toggleSection('repair-items-body',this)" style="cursor:pointer;padding:14px;margin:0;border-radius:var(--radius) var(--radius) 0 0;user-select:none;">✅ 依頼事項 <span style="float:right;font-size:14px;color:var(--sub);">▼</span></div>
+      <div id="repair-items-body" style="display:none;padding:14px;border-top:1px solid var(--border);">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+          <button id="r-tab-car"     class="btn btn-primary btn-sm" onclick="switchRepairType('car')">🚗 乗用車</button>
+          <button id="r-tab-truck"   class="btn btn-gray btn-sm"    onclick="switchRepairType('truck')">🚛 トラック</button>
+          <button id="r-tab-aircon"  class="btn btn-gray btn-sm"    onclick="switchRepairType('aircon')">❄️ エアコン</button>
+          <button id="r-tab-freezer" class="btn btn-gray btn-sm"    onclick="switchRepairType('freezer')">🧊 冷凍機</button>
+        </div>
+        <div id="repair-car-items"    class="check-grid"></div>
+        <div id="repair-truck-items"  class="check-grid" style="display:none"></div>
+        <div id="repair-aircon-items" class="check-grid" style="display:none"></div>
+        <div id="repair-freezer-items" style="display:none">
+          <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">🏭 修理工場</div>
+          <div id="repair-freezer-workshop" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+          <div class="check-grid" id="repair-freezer-check"></div>
+        </div>
       </div>
-      <div id="repair-car-items"    class="check-grid"></div>
-      <div id="repair-truck-items"  class="check-grid" style="display:none"></div>
-      <div id="repair-aircon-items" class="check-grid" style="display:none"></div>
-      <div id="repair-freezer-items" style="display:none">
-        <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">🏭 修理工場</div>
-        <div id="repair-freezer-workshop" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
-        <div class="check-grid" id="repair-freezer-check"></div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="card-title" onclick="toggleSection('notice-body',this)" style="cursor:pointer;padding:14px;margin:0;border-radius:var(--radius) var(--radius) 0 0;user-select:none;">👁️ 気がついた事 <span style="float:right;font-size:14px;color:var(--sub);">▼</span></div>
+      <div id="notice-body" style="display:none;padding:14px;border-top:1px solid var(--border);">
+        <div class="check-grid" id="check-notice"></div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">👁️ 気がついた事</div>
-      <div class="check-grid" id="check-notice"></div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="card-title" onclick="toggleSection('prevent-body',this)" style="cursor:pointer;padding:14px;margin:0;border-radius:var(--radius) var(--radius) 0 0;user-select:none;">🛡️ 予防整備チェック <span style="float:right;font-size:14px;color:var(--sub);">▼</span></div>
+      <div id="prevent-body" style="display:none;padding:14px;border-top:1px solid var(--border);">
+        <div id="check-prevent-okng"></div>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title">🛡️ 予防整備チェック</div>
-      <div id="check-prevent-okng"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">🔩 作業内容</div>
-      <div class="check-grid" id="check-work"></div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="card-title" onclick="toggleSection('work-body',this)" style="cursor:pointer;padding:14px;margin:0;border-radius:var(--radius) var(--radius) 0 0;user-select:none;">🔩 作業内容 <span style="float:right;font-size:14px;color:var(--sub);">▼</span></div>
+      <div id="work-body" style="display:none;padding:14px;border-top:1px solid var(--border);">
+        <div class="check-grid" id="check-work"></div>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">📝 備考・メモ</div>
