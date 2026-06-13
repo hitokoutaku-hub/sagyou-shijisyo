@@ -316,9 +316,18 @@ function updateNumDisplay() {
 }
 
 // ─── タブ切り替え ─────────────────────────────────────────────
+// ─── 新規登録モーダル ────────────────────────────────────
+function openNewOrderModal() {
+  document.getElementById('newOrderModal').classList.add('open');
+}
+function closeNewOrderModal() {
+  document.getElementById('newOrderModal').classList.remove('open');
+}
+
 function switchTab(tab) {
-  const tabs = ['repair','shakken','list','accident','settings','owner'];
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', tabs[i]===tab));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const activeTab = document.getElementById('tab-'+tab);
+  if (activeTab) activeTab.classList.add('active');
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-'+tab)?.classList.add('active');
   if (tab==='list')     loadList();
@@ -1092,7 +1101,7 @@ async function loadList() {
     const isTomorrow = (o.dateIn||'')===_tomorrow;
     const isPast = (o.dateIn||'')!=='' && (o.dateIn||'')<_today && o.status!=='完了' && o.status!=='引渡済';
     const isUntaken = (o.status==='入庫待ち'||o.status==='入庫中') && !o.mechName;
-    const takeBtn = isUntaken ? `<button onclick="event.stopPropagation();takeOrder('${o.id}')" style="background:#f97316;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;padding:6px 12px;cursor:pointer;flex-shrink:0">✋ やります</button>` : '';
+    const takeBtn = isUntaken ? `<div onclick="event.stopPropagation();takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border:none;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>` : '';
     const invoiceBadge = o.invoiceDone ? `<span style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;">請求書済</span>` : '';
     const alertMark = isPast ? '⚠ ' : '';
     const cardBorder = o.status==='作業中'||o.status==='入庫中' ? '2px solid #ef4444' : isPast ? '2px solid #f97316' : '1.5px solid #e2e8f0';
@@ -1100,7 +1109,7 @@ async function loadList() {
       <div class="top">
         <span class="order-num">${alertMark}${o.orderNum||'（番号なし）'}</span>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          ${partsBadge}${invoiceBadge}${takeBtn}
+          ${partsBadge}${invoiceBadge}
           <span class="badge badge-${o.status}">${o.status}</span>
         </div>
       </div>
@@ -1112,6 +1121,7 @@ async function loadList() {
       </div>
       ${nyukoInfo?`<div style="color:#3b82f6;font-size:14px;margin-top:4px;">${nyukoInfo}</div>`:''}
       ${itemsPreview}
+      ${takeBtn}
     </div>`;
   }
 
@@ -1124,7 +1134,7 @@ async function loadList() {
       ${countBadge}
     </div>`;
     const display = collapsed ? 'none' : 'block';
-    const body = `<div style="display:${display};padding:${count>0?'10px 10px 4px':'14px'};background:#fff;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none;">
+    const body = `<div style="display:${display};padding:${count>0?'10px 10px 4px':'14px'};background:#f4f5f7;border-radius:0 0 12px 12px;border:1px solid #d0d4dc;border-top:none;">
       ${count>0 ? groupOrders.map(renderOrderCard).join('') : `<div style="color:#94a3b8;font-size:16px;text-align:center;padding:8px 0;">作業なし</div>`}
     </div>`;
     return `<div style="border-radius:12px;margin-bottom:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">${header}${body}</div>`;
@@ -1145,7 +1155,7 @@ async function loadList() {
     renderGroup(todayLabel,   '🔥', '#fff7ed', '#c2410c', '#f97316', '#f97316', todayOrders) +
     renderGroup(tomorrowLabel,'📋', '#eff6ff', '#1d4ed8', '#3b82f6', '#3b82f6', tomorrowOrders) +
     renderGroup('明日以降の入庫予定', '📅', '#f0fdf4', '#15803d', '#22c55e', '#22c55e', futureOrders) +
-    renderGroup('完了・引渡済', '✅', '#f8fafc', '#64748b', '#cbd5e1', '#94a3b8', doneOrders, true);
+    renderGroup(`完了・引渡済　${doneOrders.length}件`, '✅', '#f8fafc', '#64748b', '#cbd5e1', '#94a3b8', doneOrders, true);
 }
 
 // ─── 作業引き受け ────────────────────────────────────────────
