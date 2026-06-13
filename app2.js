@@ -278,22 +278,22 @@ function downloadSelectedPhotos() {
 
 // ─── 自動採番 ────────────────────────────────────────────────
 function genOrderNum() {
-  const today = new Date();
-  const ymd = String(today.getFullYear()).slice(2)
-    + String(today.getMonth()+1).padStart(2,'0')
-    + String(today.getDate()).padStart(2,'0');
+  const year = new Date().getFullYear();
   S.counter = S.counter || {};
-  S.counter[ymd] = (S.counter[ymd] || 0) + 1;
+  // 年が変わったらリセット
+  if (S.counter._year !== year) {
+    S.counter = { _year: year, _seq: 0 };
+  }
+  S.counter._seq = (S.counter._seq || 0) + 1;
   saveState();
-  return ymd + '-' + String(S.counter[ymd]).padStart(3,'0');
+  return String(S.counter._seq).padStart(4, '0');
 }
 
 function peekOrderNum() {
-  const today = new Date();
-  const ymd = String(today.getFullYear()).slice(2)
-    + String(today.getMonth()+1).padStart(2,'0')
-    + String(today.getDate()).padStart(2,'0');
-  return ymd + '-' + String((S.counter?.[ymd] || 0) + 1).padStart(3,'0');
+  const year = new Date().getFullYear();
+  S.counter = S.counter || {};
+  if (S.counter._year !== year) return '0001';
+  return String((S.counter._seq || 0) + 1).padStart(4, '0');
 }
 
 function resetCounter() {
