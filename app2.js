@@ -279,7 +279,7 @@ function downloadSelectedPhotos() {
 // ─── 自動採番 ────────────────────────────────────────────────
 function genOrderNum() {
   const today = new Date();
-  const ymd = today.getFullYear().toString()
+  const ymd = String(today.getFullYear()).slice(2)
     + String(today.getMonth()+1).padStart(2,'0')
     + String(today.getDate()).padStart(2,'0');
   S.counter = S.counter || {};
@@ -290,7 +290,7 @@ function genOrderNum() {
 
 function peekOrderNum() {
   const today = new Date();
-  const ymd = today.getFullYear().toString()
+  const ymd = String(today.getFullYear()).slice(2)
     + String(today.getMonth()+1).padStart(2,'0')
     + String(today.getDate()).padStart(2,'0');
   return ymd + '-' + String((S.counter?.[ymd] || 0) + 1).padStart(3,'0');
@@ -317,8 +317,9 @@ function updateNumDisplay() {
 
 // ─── タブ切り替え ─────────────────────────────────────────────
 function switchTab(tab) {
-  const tabs = ['repair','shakken','list','accident','settings','owner'];
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', tabs[i]===tab));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const activeTab = document.getElementById('tab-'+tab);
+  if (activeTab) activeTab.classList.add('active');
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-'+tab)?.classList.add('active');
   if (tab==='list')     loadList();
@@ -327,6 +328,13 @@ function switchTab(tab) {
   if (tab==='shakken')  { updateNumDisplay(); renderSkItems(); }
   if (tab==='accident') { updateNumDisplay(); renderInsuranceSelect(); }
   if (tab==='owner')    renderOwnerPanel();
+}
+
+function openNewOrderModal() {
+  document.getElementById('newOrderModal').classList.add('open');
+}
+function closeNewOrderModal() {
+  document.getElementById('newOrderModal').classList.remove('open');
 }
 
 // ─── 担当者（スタッフ選択式） ────────────────────────────────
@@ -1103,53 +1111,79 @@ async function loadList() {
   });
   const el=document.getElementById('listSyncLabel'); if(el) el.textContent=sbReady?'クラウド同期済み':'ローカル保存';
   if(!orders.length) { c.innerHTML='<div class="empty">📋 指示書がありません</div>'; return; }
-  c.innerHTML=orders.map(o => {
-    const subNames = (o.subStaff||[]).map(s=>s.name).join('・');
-    const nyukoInfo = [
-      o.nyukoMethod ? o.nyukoMethod : '',
-      o.nyukoPlace  ? `📍${o.nyukoPlace}` : '',
-      o.nyukoTime   ? `⏰${o.nyukoTime}` : '',
-    ].filter(Boolean).join('　');
-    const partsBadge = o.partsPending ? `<span style="background:#7a1a1a;color:#ff7070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">🔴 部品待ち</span>` : '';
+
+  const _now=new Date();const _jst=new Date(_now.getTime()+9*60*60*1000);const _today=_jst.toISOString().split('T')[0];
+  const _tomorrowD=new Date(_jst);_tomorrowD.setDate(_tomorrowD.getDate()+1);const _tomorrow=_tomorrowD.toISOString().split('T')[0];
+  const weekdays=['日','月','火','水','木','金','土'];
+
+  function renderOrderCard(o) {
+    const subNames=(o.subStaff||[]).map(s=>s.name).join('・');
+    const nyukoInfo=[o.nyukoMethod||'',o.nyukoPlace?`📍${o.nyukoPlace}`:'',o.nyukoTime?`⏰${o.nyukoTime}`:''].filter(Boolean).join('　');
+    const partsBadge=o.partsPending?`<span style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;">部品待ち</span>`:'';
     const allItems=[...(o.carItems||[]),...(o.truckItems||[]),...(o.airconItems||[]),...(o.skResults?Object.keys(o.skResults).filter(k=>o.skResults[k]):[])].slice(0,3);
-    const itemsPreview = allItems.length ? `<div class="order-info" style="color:var(--accent);font-size:11px">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>` : '';
-    const _now=new Date();const _jst=new Date(_now.getTime()+9*60*60*1000);const _today=_jst.toISOString().split('T')[0];
-    const _tomorrowD=new Date(_jst);_tomorrowD.setDate(_tomorrowD.getDate()+1);const _tomorrow=_tomorrowD.toISOString().split('T')[0];
-    const isToday = (o.dateIn||'')===_today;
-    const isTomorrow = (o.dateIn||'')===_tomorrow;
-    const isPast = (o.dateIn||'')!=='' && (o.dateIn||'')<_today && o.status!=='完了' && o.status!=='引渡済';
-    const isUntaken = isToday && !o.mechName;
-    const takeBtn = isUntaken ? `<button onclick="event.stopPropagation();takeOrder('${o.id}')" style="background:var(--accent);border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;flex-shrink:0">✋ やります</button>` : '';
-    const invoiceBadge = o.invoiceDone
-      ? `<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">📄 請求書済</span>`
-      : `<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#2a2200;color:#d0b040;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">📄 請求書未</span>`;
-    const bookmarkBadge = o.bookmarked ? `<span style="background:#2a1a5a;color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">⭐</span>` : '';
-    const is3month = [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
-    const recordBadge = is3month && !o.recordDone
-      ? `<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#3a2000;color:#d0b040;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">📋 記録簿未</span>` : '';
-    const recordDoneBadge = is3month && o.recordDone
-      ? `<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#1a3a1a;color:#40d070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">📋 記録簿済</span>` : '';
-    const rowStyle = isPast ? 'border-left:4px solid #cc4444;background:rgba(200,60,60,0.08);' : isToday ? 'border-left:4px solid var(--accent);background:rgba(240,160,48,0.08);' : isTomorrow ? 'border-left:4px solid #4488ff;background:rgba(68,136,255,0.08);' : '';
-    const prefix = isPast ? '⚠️ ' : isToday ? '🔥 ' : isTomorrow ? '🔔 ' : '';
-    return `<div class="order-item" onclick="showDetail('${o.id}')" style="${rowStyle}">
+    const itemsPreview=allItems.length?`<div style="font-size:14px;color:#f97316;margin-top:4px;">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>`:'';
+    const isPast=(o.dateIn||'')!==''&&(o.dateIn||'')<_today&&o.status!=='完了'&&o.status!=='引渡済';
+    const isUntaken=(o.status==='入庫待ち'||o.status==='入庫中')&&!o.mechName;
+    const takeBtn=isUntaken?`<div onclick="event.stopPropagation();takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
+    const invoiceBadge=o.invoiceDone
+      ?`<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">請求書済</span>`
+      :`<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">請求書未</span>`;
+    const bookmarkBadge=o.bookmarked?`<span style="background:#f3e8ff;color:#7e22ce;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;">⭐</span>`:'';
+    const is3month=[...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
+    const recordBadge=is3month&&!o.recordDone?`<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#fefce8;color:#854d0e;border:1px solid #fde68a;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">記録簿未</span>`:'';
+    const recordDoneBadge=is3month&&o.recordDone?`<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">記録簿済</span>`:'';
+    const alertMark=isPast?'⚠ ':'';
+    const cardBorder=o.status==='作業中'||o.status==='入庫中'?'2px solid #ef4444':isPast?'2px solid #f97316':'1.5px solid var(--border)';
+    return `<div class="order-item" onclick="showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;">
       <div class="top">
-        <span class="order-num">${prefix}${o.orderNum||'（番号なし）'}</span>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          ${bookmarkBadge}
-          ${partsBadge}
-          ${invoiceBadge}
-          ${recordBadge}
-          ${recordDoneBadge}
-          ${takeBtn}
+        <span class="order-num">${alertMark}${o.orderNum||'（番号なし）'}</span>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+          ${bookmarkBadge}${partsBadge}${invoiceBadge}${recordBadge}${recordDoneBadge}
           <span class="badge badge-${o.status}">${o.status}</span>
         </div>
       </div>
-      <div class="order-info">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}　${o.carPlate?'【'+o.carPlate+'】':''}</div>
-      <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}${o.plannedStaff?`　<span style="color:#ffaa30">予定：${o.plannedStaff}</span>`:''}</div>
-      ${nyukoInfo?`<div class="order-info" style="color:#88aaff;font-size:12px">${nyukoInfo}</div>`:''}
+      <div style="font-size:17px;font-weight:500;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
+        <span>📅 ${o.dateIn||'未設定'}</span>
+        <span>👤 ${o.mechName||'未定'}${subNames?'・'+subNames:''}</span>
+        ${o.plannedStaff?`<span style="color:#f97316;">予定：${o.plannedStaff}</span>`:''}
+      </div>
+      ${nyukoInfo?`<div style="color:#1d4ed8;font-size:15px;font-weight:600;margin-top:6px;">🚗 ${nyukoInfo}</div>`:''}
       ${itemsPreview}
+      ${takeBtn}
     </div>`;
-  }).join('');
+  }
+
+  function renderGroup(label,icon,headerBg,headerColor,borderColor,badgeBg,groupOrders,collapsed=false) {
+    const count=groupOrders.length;
+    const countBadge=`<span style="background:${badgeBg};color:#fff;font-size:14px;font-weight:700;border-radius:20px;padding:4px 14px;flex-shrink:0;">${count}件</span>`;
+    const header=`<div style="display:flex;align-items:center;gap:10px;padding:16px;background:${headerBg};border-top:4px solid ${borderColor};border-radius:12px 12px 0 0;cursor:pointer;min-height:56px;" onclick="const b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';">
+      <span style="font-size:22px;">${icon}</span>
+      <span style="color:${headerColor};font-weight:600;font-size:17px;flex:1;">${label}</span>
+      ${countBadge}
+    </div>`;
+    const display=collapsed?'none':'block';
+    const body=`<div style="display:${display};padding:${count>0?'10px 10px 4px':'14px'};background:var(--card);border-radius:0 0 12px 12px;border:1px solid var(--border);border-top:none;">
+      ${count>0?groupOrders.map(renderOrderCard).join(''):`<div style="color:var(--sub);font-size:16px;text-align:center;padding:8px 0;">作業なし</div>`}
+    </div>`;
+    return `<div style="border-radius:12px;margin-bottom:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">${header}${body}</div>`;
+  }
+
+  const inProgressOrders=orders.filter(o=>o.status==='作業中'||o.status==='入庫中');
+  const todayOrders=orders.filter(o=>{const d=o.dateIn||'';return o.status==='入庫待ち'&&(d===_today||(d!==''&&d<_today));});
+  const tomorrowOrders=orders.filter(o=>o.status==='入庫待ち'&&(o.dateIn||'')===_tomorrow);
+  const futureOrders=orders.filter(o=>o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
+  const doneOrders=orders.filter(o=>o.status==='完了'||o.status==='引渡済');
+
+  const todayLabel=`今日の入庫予定　${_today.slice(5).replace('-','/')}（${weekdays[_jst.getDay()]}）`;
+  const tomorrowLabel=`明日の入庫予定　${_tomorrow.slice(5).replace('-','/')}（${weekdays[new Date(_jst.getTime()+86400000).getDay()]}）`;
+
+  c.innerHTML=
+    renderGroup('現在進行中','🔨','#fef2f2','#991b1b','#ef4444','#ef4444',inProgressOrders)+
+    renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders)+
+    renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders)+
+    renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders)+
+    renderGroup(`完了・引渡済　${doneOrders.length}件`,'✅','#f8fafc','#64748b','#cbd5e1','#94a3b8',doneOrders,true);
 }
 
 // ─── 作業引き受け ────────────────────────────────────────────
@@ -2152,11 +2186,12 @@ function initApp() {
   renderSubStaffArea();
 
   setTimeout(()=>loadMasters(), 500);
-
-  const today=new Date().toISOString().split('T')[0];
-  ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
-}
-
-// ─── 起動 ─────────────────────────────────────────────────────
-initSupabase();
-initAuth();
+  setTimeout(()=>{
+    // 一覧パネルが表示されていたら即ロード
+    const listPanel = document.getElementById('panel-list');
+    if (listPanel && listPanel.classList.contains('active')) {
+      loadList();
+    }
+    // tab-list をアクティブに
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    
