@@ -1072,7 +1072,12 @@ async function loadList() {
   });
   const el=document.getElementById('listSyncLabel'); if(el) el.textContent=sbReady?'クラウド同期済み':'ローカル保存';
   if(!orders.length) { c.innerHTML='<div class="empty">📋 指示書がありません</div>'; return; }
-  c.innerHTML=orders.map(o => {
+
+  // ─── 日付グループ分け ─────────────────────────────────────
+  const _now=new Date();const _jst=new Date(_now.getTime()+9*60*60*1000);const _today=_jst.toISOString().split('T')[0];
+  const _tomorrowD=new Date(_jst);_tomorrowD.setDate(_tomorrowD.getDate()+1);const _tomorrow=_tomorrowD.toISOString().split('T')[0];
+
+  function renderOrderCard(o) {
     const subNames = (o.subStaff||[]).map(s=>s.name).join('・');
     const nyukoInfo = [
       o.nyukoMethod ? o.nyukoMethod : '',
@@ -1082,8 +1087,6 @@ async function loadList() {
     const partsBadge = o.partsPending ? `<span style="background:#7a1a1a;color:#ff7070;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">🔴 部品待ち</span>` : '';
     const allItems=[...(o.carItems||[]),...(o.truckItems||[]),...(o.airconItems||[]),...(o.skResults?Object.keys(o.skResults).filter(k=>o.skResults[k]):[])].slice(0,3);
     const itemsPreview = allItems.length ? `<div class="order-info" style="color:var(--accent);font-size:11px">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>` : '';
-    const _now=new Date();const _jst=new Date(_now.getTime()+9*60*60*1000);const _today=_jst.toISOString().split('T')[0];
-    const _tomorrowD=new Date(_jst);_tomorrowD.setDate(_tomorrowD.getDate()+1);const _tomorrow=_tomorrowD.toISOString().split('T')[0];
     const isToday = (o.dateIn||'')===_today;
     const isTomorrow = (o.dateIn||'')===_tomorrow;
     const isPast = (o.dateIn||'')!=='' && (o.dateIn||'')<_today && o.status!=='完了' && o.status!=='引渡済';
@@ -1102,12 +1105,42 @@ async function loadList() {
           <span class="badge badge-${o.status}">${o.status}</span>
         </div>
       </div>
-      <div class="order-info">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}　${o.carPlate?'【'+o.carPlate+'】':''}</div>
-      <div class="order-info">入庫: ${o.dateIn||'未設定'}　出庫: ${o.dateOut||'未設定'}　担当: ${o.mechName||'未定'}${subNames?'・'+subNames:''}${o.plannedStaff?`　<span style="color:#ffaa30">予定：${o.plannedStaff}</span>`:''}</div>
-      ${nyukoInfo?`<div class="order-info" style="color:#88aaff;font-size:12px">${nyukoInfo}</div>`:''}
+      <div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:6px">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
+      <div class="order-info" style="display:flex;flex-wrap:wrap;gap:10px 20px;margin-top:4px"><span>📅 ${o.dateIn||'未設定'}</span><span>👤 ${o.mechName||'未定'}${subNames?'・'+subNames:''}</span>${o.plannedStaff?'<span style="color:#ffaa30">予：'+o.plannedStaff+'</span>':''}</div>
+      ${nyukoInfo?`<div class="order-info" style="color:#aaccff;font-size:13px;margin-top:2px">${nyukoInfo}</div>`:''}
       ${itemsPreview}
     </div>`;
-  }).join('');
+  }
+
+  function renderGroup(label, icon, accentColor, glowColor, groupOrders) {
+    const count = groupOrders.length;
+    const countBadge = `<span style="background:${count>0?accentColor:'#2a3050'};color:${count>0?'#000':'var(--sub)'};font-size:14px;font-weight:800;border-radius:20px;padding:4px 13px;flex-shrink:0">${count}件</span>`;
+    const header = `<div style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(90deg,rgba(${glowColor},0.18) 0%,transparent 100%);border-bottom:1px solid var(--border);border-top:4px solid ${accentColor};border-radius:10px 10px 0 0;cursor:pointer;min-height:54px" onclick="this.parentElement.querySelector('.group-body').style.display=this.parentElement.querySelector('.group-body').style.display==='none'?'block':'none'">
+      <span style="font-size:20px">${icon}</span>
+      <span style="color:${accentColor};font-weight:800;font-size:16px;flex:1">${label}</span>
+      ${countBadge}
+    </div>`;
+    const body = `<div class="group-body" style="padding:${count>0?'8px 8px 2px':'12px 14px'}">
+      ${count>0 ? groupOrders.map(renderOrderCard).join('') : `<div style="color:var(--sub);font-size:16px;text-align:center">作業なし</div>`}
+    </div>`;
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.3)">${header}${body}</div>`;
+  }
+
+  const todayOrders    = orders.filter(o => { const d=o.dateIn||''; return d===_today || (d!==''&&d<_today&&o.status!=='完了'&&o.status!=='引渡済'); });
+  const tomorrowOrders = orders.filter(o => (o.dateIn||'')===_tomorrow);
+  const futureOrders   = orders.filter(o => { const d=o.dateIn||''; return d>_tomorrow; });
+  const undatedOrders  = orders.filter(o => !o.dateIn && o.status!=='完了' && o.status!=='引渡済');
+
+  // 日付フォーマット（MM/DD 曜日）
+  const weekdays=['日','月','火','水','木','金','土'];
+  const todayLabel  = `今日の作業　${_today.slice(5).replace('-','/')}（${weekdays[_jst.getDay()]}）`;
+  const tomorrowLabel = `明日の作業　${_tomorrow.slice(5).replace('-','/')}（${weekdays[new Date(_jst.getTime()+86400000).getDay()]}）`;
+
+  c.innerHTML =
+    renderGroup(todayLabel,    '🔧', 'var(--accent)',  '240,160,48', todayOrders) +
+    renderGroup(tomorrowLabel, '📋', '#4488ff',        '68,136,255', tomorrowOrders) +
+    renderGroup('明日以降の作業', '📅', '#44cc88',     '68,204,136', futureOrders) +
+    (undatedOrders.length ? renderGroup('入庫日未設定', '❓', '#8888aa', '136,136,170', undatedOrders) : '');
 }
 
 // ─── 作業引き受け ────────────────────────────────────────────
