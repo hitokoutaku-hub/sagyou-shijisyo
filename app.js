@@ -2186,12 +2186,12 @@ function initApp() {
   renderSubStaffArea();
 
   setTimeout(()=>loadMasters(), 500);
-  setTimeout(()=>loadList(), 800);
-
-  const today=new Date().toISOString().split('T')[0];
-  ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
-}
-
-// ─── 起動 ─────────────────────────────────────────────────────
-initSupabase();
-initAuth();
+  setTimeout(()=>{
+    // 一覧パネルが表示されていたら即ロード
+    const listPanel = document.getElementById('panel-list');
+    if (listPanel && listPanel.classList.contains('active')) {
+      loadList();
+    }
+    // tab-list をアクティブに
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    
