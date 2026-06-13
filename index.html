@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>作業指示書管理システム</title>
+  <title>整備指示書</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
@@ -14,7 +14,7 @@
 
 <div id="app">
   <div class="header">
-    <h1>🔧 作業指示書管理システム</h1>
+    <h1>🔧 整備指示書</h1>
     <div class="header-right">
       <div class="sync-badge">
         <span class="sync-dot" id="syncDot"></span>
@@ -35,12 +35,12 @@
 
   <!-- 新規登録モーダル -->
   <div class="modal-bg" id="newOrderModal">
-    <div class="modal" style="max-width:340px;">
+    <div class="modal" style="max-width:360px;">
       <div class="modal-title">📝 種類を選んでください</div>
-      <button class="staff-select-btn" onclick="closeNewOrderModal();switchTab('repair')">🔧　一般修理</button>
-      <button class="staff-select-btn" onclick="closeNewOrderModal();switchTab('shakken')">🔍　車検</button>
-      <button class="staff-select-btn" onclick="closeNewOrderModal();switchTab('accident')">🚨　事故修理</button>
-      <button class="btn btn-gray" style="width:100%;margin-top:4px;" onclick="closeNewOrderModal()">キャンセル</button>
+      <button onclick="closeNewOrderModal();switchTab('repair')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:10px;background:#fff7ed;border:2px solid #fed7aa;border-radius:12px;font-size:18px;font-weight:700;color:#c2410c;cursor:pointer;text-align:left;">🔧 一般修理</button>
+      <button onclick="closeNewOrderModal();switchTab('shakken')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:10px;background:#eff6ff;border:2px solid #bfdbfe;border-radius:12px;font-size:18px;font-weight:700;color:#1d4ed8;cursor:pointer;text-align:left;">🔍 車検</button>
+      <button onclick="closeNewOrderModal();switchTab('accident')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:16px;background:#fef2f2;border:2px solid #fecaca;border-radius:12px;font-size:18px;font-weight:700;color:#991b1b;cursor:pointer;text-align:left;">🚨 事故修理</button>
+      <button onclick="closeNewOrderModal()" style="width:100%;padding:16px;background:var(--card2);border:1.5px solid var(--border);border-radius:12px;font-size:17px;font-weight:600;color:var(--sub);cursor:pointer;">キャンセル</button>
     </div>
   </div>
 
@@ -488,7 +488,7 @@
   </div>
 </div>
 
-<script src="auth.js?v=1"></script>
-<script src="app2.js?v=7"></script>
+<script src="auth.js?v=2"></script>
+<script src="app2.js?v=8"></script>
 </body>
 </html>
