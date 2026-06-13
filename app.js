@@ -279,7 +279,7 @@ function downloadSelectedPhotos() {
 // ─── 自動採番 ────────────────────────────────────────────────
 function genOrderNum() {
   const today = new Date();
-  const ymd = today.getFullYear().toString()
+  const ymd = String(today.getFullYear()).slice(2)
     + String(today.getMonth()+1).padStart(2,'0')
     + String(today.getDate()).padStart(2,'0');
   S.counter = S.counter || {};
@@ -290,7 +290,7 @@ function genOrderNum() {
 
 function peekOrderNum() {
   const today = new Date();
-  const ymd = today.getFullYear().toString()
+  const ymd = String(today.getFullYear()).slice(2)
     + String(today.getMonth()+1).padStart(2,'0')
     + String(today.getDate()).padStart(2,'0');
   return ymd + '-' + String((S.counter?.[ymd] || 0) + 1).padStart(3,'0');
@@ -1127,7 +1127,7 @@ async function loadList() {
     const takeBtn=isUntaken?`<div onclick="event.stopPropagation();takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
     const invoiceBadge=o.invoiceDone
       ?`<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">請求書済</span>`
-      :`<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#fefce8;color:#854d0e;border:1px solid #fde68a;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">請求書未</span>`;
+      :`<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">請求書未</span>`;
     const bookmarkBadge=o.bookmarked?`<span style="background:#f3e8ff;color:#7e22ce;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;">⭐</span>`:'';
     const is3month=[...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
     const recordBadge=is3month&&!o.recordDone?`<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#fefce8;color:#854d0e;border:1px solid #fde68a;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">記録簿未</span>`:'';
@@ -1148,7 +1148,7 @@ async function loadList() {
         <span>👤 ${o.mechName||'未定'}${subNames?'・'+subNames:''}</span>
         ${o.plannedStaff?`<span style="color:#f97316;">予定：${o.plannedStaff}</span>`:''}
       </div>
-      ${nyukoInfo?`<div style="color:#3b82f6;font-size:14px;margin-top:4px;">${nyukoInfo}</div>`:''}
+      ${nyukoInfo?`<div style="color:#1d4ed8;font-size:15px;font-weight:600;margin-top:6px;">🚗 ${nyukoInfo}</div>`:''}
       ${itemsPreview}
       ${takeBtn}
     </div>`;
@@ -2186,6 +2186,7 @@ function initApp() {
   renderSubStaffArea();
 
   setTimeout(()=>loadMasters(), 500);
+  setTimeout(()=>loadList(), 800);
 
   const today=new Date().toISOString().split('T')[0];
   ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
