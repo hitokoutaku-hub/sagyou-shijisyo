@@ -564,18 +564,41 @@ textarea.lg { min-height: 180px; }
 
 /* ─── レスポンシブ ──────────────────────────────────────────── */
 @media (max-width: 600px) {
-  /* 50代・スマホ向け：文字大きく・タップしやすく */
   body { font-size: 17px; line-height: 1.7; }
-  .row2, .row3 { grid-template-columns: 1fr; }
-  .check-grid  { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  #app { padding: 8px 12px; }
+  .row2, .row3 { grid-template-columns: 1fr; gap: 12px; }
+  .check-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 
-  /* ログイン画面 */
-  #login-screen { padding: 28px 20px; }
-  .login-box { padding: 28px 20px; }
-  .login-title { font-size: 22px; }
-  .login-input { font-size: 18px; padding: 16px 14px; }
-  .login-btn { font-size: 18px; padding: 18px; min-height: 58px; }
+  .header h1 { font-size: 18px; }
+  .sync-badge { font-size: 13px; }
 
-  /* スタッフ選択ボタン */
-  .staff-select-btn { font-size: 18px; padding: 18px 16px; min-height: 60px; }
+  .card { padding: 16px 14px; border-radius: 12px; margin-bottom: 12px; }
+  .card-title { font-size: 17px; }
+
+  label { font-size: 14px; margin-top: 16px; margin-bottom: 6px; }
+  input, select, textarea { font-size: 18px; padding: 16px 14px; border-radius: 12px; border-width: 2px; }
+
+  .order-item { padding: 18px 14px; margin-bottom: 12px; border-radius: 14px; border-width: 2px; }
+  .order-num { font-size: 18px; }
+  .order-info { font-size: 16px; line-height: 2.0; }
+  .badge { font-size: 13px; padding: 5px 13px; border-radius: 20px; }
+
+  .btn { padding: 16px 20px; font-size: 17px; border-radius: 12px; min-height: 54px; }
+  .btn-sm { padding: 12px 16px; font-size: 15px; min-height: 46px; }
+  .btn-row { gap: 10px; margin-top: 16px; }
+
+  .check-item { padding: 14px 12px; font-size: 16px; border-width: 2px; min-height: 52px; }
+
+  .modal { padding: 20px 16px; border-radius: 16px; }
+  .modal-title { font-size: 19px; }
+  .detail-grid { grid-template-columns: 1fr; gap: 10px; }
+  .detail-item .dt-val { font-size: 17px; }
+
+  .staff-tag { font-size: 15px; padding: 9px 16px; }
+  .staff-select-btn { font-size: 18px; padding: 18px 16px; min-height: 60px; margin-bottom: 10px; }
+
+  .sk-item { padding: 12px 0; }
+  .sk-item-label { font-size: 16px; }
+  .sk-btn { padding: 10px 14px; font-size: 14px; min-height: 44px; }
+  .empty { font-size: 16px; padding: 40px 20px; }
 }
