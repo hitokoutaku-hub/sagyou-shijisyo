@@ -337,6 +337,15 @@ function closeNewOrderModal() {
   document.getElementById('newOrderModal').classList.remove('open');
 }
 
+function toggleSection(bodyId, titleEl) {
+  const body = document.getElementById(bodyId);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  const arrow = titleEl.querySelector('span');
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
+}
+
 // ─── 担当者（スタッフ選択式） ────────────────────────────────
 async function renderMechSelect(containerId) {
   const el = document.getElementById(containerId);
