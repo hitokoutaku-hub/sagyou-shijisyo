@@ -1128,40 +1128,48 @@ async function loadList() {
   function renderOrderCard(o) {
     const subNames=(o.subStaff||[]).map(s=>s.name).join('・');
     const nyukoInfo=[o.nyukoMethod||'',o.nyukoPlace?`📍${o.nyukoPlace}`:'',o.nyukoTime?`⏰${o.nyukoTime}`:''].filter(Boolean).join('　');
-    const partsBadge=o.partsPending?`<span style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;">部品待ち</span>`:'';
     const allItems=[...(o.carItems||[]),...(o.truckItems||[]),...(o.airconItems||[]),...(o.skResults?Object.keys(o.skResults).filter(k=>o.skResults[k]):[])].slice(0,3);
     const itemsPreview=allItems.length?`<div style="font-size:14px;color:#f97316;margin-top:4px;">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>`:'';
-    const isPast=(o.dateIn||'')!==''&&(o.dateIn||'')<_today&&o.status!=='完了'&&o.status!=='引渡済';
-    const isUntaken=(o.status==='入庫待ち'||o.status==='入庫中')&&!o.mechName;
-    const takeBtn=isUntaken?`<div onclick="event.stopPropagation();takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
-    const invoiceBadge=o.invoiceDone
-      ?`<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">請求書済</span>`
-      :`<span onclick="event.stopPropagation();toggleInvoiceDoneList('${o.id}')" style="background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">請求書未</span>`;
-    const bookmarkBadge=o.bookmarked?`<span style="background:#f3e8ff;color:#7e22ce;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;">⭐</span>`:'';
-    const is3month=[...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
-    const recordBadge=is3month&&!o.recordDone?`<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#fefce8;color:#854d0e;border:1px solid #fde68a;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">記録簿未</span>`:'';
-    const recordDoneBadge=is3month&&o.recordDone?`<span onclick="event.stopPropagation();toggleRecordDoneList('${o.id}')" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;">記録簿済</span>`:'';
+    const isPast=(o.dateIn||'')!==''&&(o.dateIn||'')<_today&&o.status!=='引渡済';
+    const isUntaken=o.status==='入庫待ち'&&!o.mechName;
+    const bookmarkBadge=o.bookmarked?`<span style="color:#7e22ce;font-size:14px;">⭐</span>`:'';
     const alertMark=isPast?'⚠ ':'';
-    const cardBorder=o.status==='作業中'||o.status==='入庫中'?'2px solid #ef4444':isPast?'2px solid #f97316':'1.5px solid var(--border)';
+    const cardBorder=o.status==='作業中'?'2px solid #ef4444':isPast?'2px solid #f97316':'1.5px solid var(--border)';
+    // 備考1行目
+    const remarksPreview=o.remarks?(()=>{const first=o.remarks.trim().split('\n')[0];return first?`<div style="font-size:13px;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📝 ${first}</div>`:''})():'';
+    // ステータスボタン3つ
+    const statuses=[['入庫待ち','#f97316'],['作業中','#ef4444'],['引渡済','#64748b']];
+    const statusBtns=statuses.map(([s,c])=>`<button onclick="event.stopPropagation();quickStatus('${o.id}','${s}')" style="flex:1;padding:10px 4px;font-size:13px;font-weight:700;background:${o.status===s?c:'#f8fafc'};color:${o.status===s?'#fff':'#94a3b8'};border:1.5px solid ${o.status===s?c:'#e2e8f0'};border-radius:10px;cursor:pointer;">${s}</button>`).join('');
+    // 進捗ボタン6つ
+    const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['🚗','試運転OK','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
+    const prog=o.progress||[];
+    const progressBtns=progressDef.map(([icon,key,bg,color])=>`<button onclick="event.stopPropagation();quickProgress('${o.id}','${key}')" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
+    // 私が担当しますボタン
+    const takeBtn=isUntaken?`<div onclick="event.stopPropagation();takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
     return `<div class="order-item" onclick="showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;">
       <div class="top">
-        <span class="order-num">${alertMark}${o.orderNum||'（番号なし）'}</span>
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
-          ${bookmarkBadge}${partsBadge}${invoiceBadge}${recordBadge}${recordDoneBadge}
-          <span class="badge badge-${o.status}">${o.status}</span>
-        </div>
+        <span class="order-num">${bookmarkBadge}${alertMark}${o.orderNum||'（番号なし）'}</span>
       </div>
-      <div style="font-size:17px;font-weight:500;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
+      <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
         <span>📅 ${o.dateIn||'未設定'}</span>
         <span>👤 ${o.mechName||'未定'}${subNames?'・'+subNames:''}</span>
-        ${o.plannedStaff?`<span style="color:#f97316;">予定：${o.plannedStaff}</span>`:''}
       </div>
       ${nyukoInfo?`<div style="color:#1d4ed8;font-size:15px;font-weight:600;margin-top:6px;">🚗 ${nyukoInfo}</div>`:''}
       ${itemsPreview}
+      ${remarksPreview}
+      <div style="border-top:1px solid #e2e8f0;margin-top:10px;padding-top:10px;">
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">ステータス</div>
+        <div style="display:flex;gap:6px;">${statusBtns}</div>
+      </div>
+      <div style="margin-top:8px;">
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">進捗</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${progressBtns}</div>
+      </div>
       ${takeBtn}
     </div>`;
   }
+
 
   function renderGroup(label,icon,headerBg,headerColor,borderColor,badgeBg,groupOrders,collapsed=false) {
     const count=groupOrders.length;
@@ -1196,6 +1204,34 @@ async function loadList() {
 }
 
 // ─── 作業引き受け ────────────────────────────────────────────
+
+// ─── 一覧からのクイック操作 ──────────────────────────────────
+async function quickStatus(orderId, newStatus) {
+  const order = S.orders.find(o => o.id === orderId);
+  if (!order) return;
+  order.status = newStatus;
+  saveState();
+  if (sb) {
+    try { await sb.from(DB_TABLES.ORDERS).update({ status: newStatus }).eq('id', orderId); } catch(e) {}
+  }
+  showToast(`ステータスを「${newStatus}」に変更しました`, 'success');
+  loadList();
+}
+
+async function quickProgress(orderId, key) {
+  const order = S.orders.find(o => o.id === orderId);
+  if (!order) return;
+  order.progress = order.progress || [];
+  const has = order.progress.includes(key);
+  if (has) { order.progress = order.progress.filter(k => k !== key); }
+  else { order.progress.push(key); }
+  saveState();
+  if (sb) {
+    try { await sb.from(DB_TABLES.ORDERS).update({ progress: order.progress }).eq('id', orderId); } catch(e) {}
+  }
+  loadList();
+}
+
 async function takeOrder(id) {
   if(!currentUser) { showToast('ログインしてください','error'); return; }
   if(!confirm(`「${currentUser.name}」がこの作業を引き受けますか？`)) return;
@@ -1290,17 +1326,10 @@ async function openShijishoView(order) {
         <div style="font-size:11px;color:var(--sub);font-weight:700">${typeLabel}</div>
         <div style="font-size:20px;font-weight:800;color:var(--accent)">${order.orderNum||'番号なし'}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="badge badge-${order.status}" style="font-size:13px;padding:5px 14px">${order.status}</span>
-        ${joinBtn}
-        <button class="btn btn-sm" style="background:${order.bookmarked?'#2a1a5a':'var(--border)'};color:${order.bookmarked?'#c4b5fd':'var(--text)'};border:none;" onclick="toggleBookmark('${order.id}')">${order.bookmarked?'⭐ 済':'☆ ブックマーク'}</button>
-        <button class="btn btn-ok btn-sm" onclick="openAddPhotoModal('${order.id}')">📷 写真追加</button>
-        <button class="btn btn-info btn-sm" onclick="openEditModal('${order.id}')">✏️ 編集</button>
-        <button class="btn btn-gray btn-sm" onclick="openManageModal('${order.id}')">⚙️ 管理</button>
-        <button class="btn btn-sm" style="background:${order.invoiceDone?'#1a3a1a':'#2a2200'};color:${order.invoiceDone?'#40d070':'#d0b040'};border:none;" onclick="toggleInvoiceDone('${order.id}')">📄 ${order.invoiceDone?'請求書済':'請求書未'}</button>
-        ${[...(order.carItems||[]),...(order.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月')) ? '<button class="btn btn-sm" style="background:'+( order.recordDone?'#1a3a1a':'#2a2200')+';color:'+(order.recordDone?'#40d070':'#d0b040')+';border:none;" onclick="toggleRecordDone(\'' + order.id + '\')">📋 '+(order.recordDone?'記録簿済':'記録簿未')+'</button>' : ''}
-        <button class="btn btn-primary btn-sm" style="background:#06c755" onclick="sendLineReport('${order.id}')">💬 LINE</button>
-        <button class="btn btn-primary btn-sm" onclick="closeShijishoView()">✕</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="toggleBookmark('${order.id}')" style="background:${order.bookmarked?'#f3e8ff':'#f8fafc'};border:1.5px solid ${order.bookmarked?'#7e22ce':'var(--border)'};border-radius:10px;padding:10px 14px;font-size:18px;cursor:pointer;">${order.bookmarked?'⭐':'☆'}</button>
+        <button onclick="openEditModal('${order.id}')" style="flex:1;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:700;color:#1d4ed8;cursor:pointer;">✏️ 編集</button>
+        <button onclick="closeShijishoView()" style="background:#f8fafc;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;color:var(--sub);">×</button>
       </div>
     </div>
     <div style="max-width:900px;margin:0 auto;padding:16px">
