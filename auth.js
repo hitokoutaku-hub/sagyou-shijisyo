@@ -220,7 +220,6 @@ async function recordLog(action) {
       staff_id:   currentUser.id,
       staff_name: currentUser.name,
       action,
-      logged_at:  new Date().toISOString(),
     }]);
   } catch(e) { console.log('ログ記録エラー:', e); }
 }
