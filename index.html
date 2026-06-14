@@ -60,7 +60,7 @@
         </select>
         <select id="filterStatus" onchange="loadList()" style="flex:1;min-width:110px;padding:12px;font-size:15px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);">
           <option value="">全ステータス</option>
-          <option>入庫中</option><option>作業中</option><option>完了</option><option>引渡済</option><option>車検中</option>
+          <option>入庫待ち</option><option>作業中</option><option>引渡済</option>
         </select>
         <select id="filterType" onchange="loadList()" style="flex:1;min-width:110px;padding:12px;font-size:15px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);">
           <option value="">全種別</option>
@@ -90,13 +90,18 @@
           <label>ステータス</label>
           <select id="r-status">
             <option value="入庫待ち">入庫待ち</option>
-            <option value="入庫中" selected>入庫中</option>
+            <option value="入庫待ち" selected>入庫待ち</option>
             <option value="作業中">作業中</option>
             <option value="完了">完了</option>
             <option value="引渡済">引渡済</option>
           </select>
         </div>
-        <div><label>入庫日</label><input type="date" id="r-dateIn"></div>
+        <div><label>入庫日</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="date" id="r-dateIn" style="flex:1;">
+            <button type="button" onclick="document.getElementById('r-dateIn').value=new Date().toLocaleDateString('sv-SE')" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">今日</button>
+          </div>
+        </div>
       </div>
       <div class="row2">
         <div>
@@ -223,7 +228,7 @@
         <select id="filterMonth" onchange="loadList()" style="flex:1;min-width:120px"><option value="">全月</option></select>
         <select id="filterStatus" onchange="loadList()">
           <option value="">全ステータス</option>
-          <option>入庫待ち</option><option>入庫中</option><option>作業中</option><option>完了</option><option>引渡済</option><option>車検中</option>
+          <option>入庫待ち</option><option>入庫待ち</option><option>作業中</option><option>引渡済</option>
         </select>
         <select id="filterType" onchange="loadList()">
           <option value="">全種別</option>
@@ -262,12 +267,17 @@
           <label>ステータス</label>
           <select id="sk-status">
             <option value="入庫待ち">入庫待ち</option>
-            <option value="車検中" selected>車検中</option>
+            <option value="入庫待ち" selected>入庫待ち</option>
             <option value="完了">完了</option>
             <option value="引渡済">引渡済</option>
           </select>
         </div>
-        <div><label>車検入庫日</label><input type="date" id="sk-dateIn"></div>
+        <div><label>車検入庫日</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="date" id="sk-dateIn" style="flex:1;">
+            <button type="button" onclick="document.getElementById('sk-dateIn').value=new Date().toLocaleDateString('sv-SE')" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">今日</button>
+          </div>
+        </div>
       </div>
       <div class="row2">
         <div>
@@ -361,13 +371,18 @@
           <label>ステータス</label>
           <select id="ac-status">
             <option value="入庫待ち">入庫待ち</option>
-            <option value="入庫中" selected>入庫中</option>
+            <option value="入庫待ち" selected>入庫待ち</option>
             <option value="作業中">作業中</option>
             <option value="完了">完了</option>
             <option value="引渡済">引渡済</option>
           </select>
         </div>
-        <div><label>入庫日</label><input type="date" id="ac-dateIn"></div>
+        <div><label>入庫日</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="date" id="ac-dateIn" style="flex:1;">
+            <button type="button" onclick="document.getElementById('ac-dateIn').value=new Date().toLocaleDateString('sv-SE')" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">今日</button>
+          </div>
+        </div>
       </div>
       <div class="row2">
         <div>
