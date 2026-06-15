@@ -1212,7 +1212,7 @@ async function quickStatus(orderId, newStatus) {
   order.status = newStatus;
   saveState();
   if (sb) {
-    try { await sb.from(DB_TABLES.ORDERS).update({ status: newStatus }).eq('id', orderId); } catch(e) {}
+    try { await sb.from(DB_TABLES.KIROKU).update({ status: newStatus }).eq('id', orderId); } catch(e) {}
   }
   showToast(`ステータスを「${newStatus}」に変更しました`, 'success');
   loadList();
@@ -1227,7 +1227,7 @@ async function quickProgress(orderId, key) {
   else { order.progress.push(key); }
   saveState();
   if (sb) {
-    try { await sb.from(DB_TABLES.ORDERS).update({ progress: order.progress }).eq('id', orderId); } catch(e) {}
+    try { await sbSaveOrder(order); } catch(e) {}
   }
   loadList();
 }
