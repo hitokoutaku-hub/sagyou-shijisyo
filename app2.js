@@ -1226,10 +1226,24 @@ async function quickProgress(orderId, key) {
   if (has) { order.progress = order.progress.filter(k => k !== key); }
   else { order.progress.push(key); }
   saveState();
+  // Supabase保存完了後にloadList
   if (sb) {
-    try { await sbSaveOrder(order); } catch(e) {}
+    try { await sbSaveOrder(order); } catch(e) { console.log('progress保存エラー:', e); }
   }
-  loadList();
+  // loadListはSupabaseから再読み込みするのでローカルの変更を先に反映
+  const c = document.getElementById('orderList');
+  if (c) {
+    // ボタンの色だけ即時更新
+    const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['🚗','試運転OK','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
+    progressDef.forEach(([icon, k, bg, color]) => {
+      const on = order.progress.includes(k);
+      document.querySelectorAll(`button[onclick*="quickProgress('${orderId}','${k}')"]`).forEach(btn => {
+        btn.style.background = on ? bg : '#f8fafc';
+        btn.style.color = on ? color : '#94a3b8';
+        btn.style.border = `1.5px solid ${on ? color : '#e2e8f0'}`;
+      });
+    });
+  }
 }
 
 async function takeOrder(id) {
