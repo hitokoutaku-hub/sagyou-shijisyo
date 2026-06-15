@@ -124,7 +124,7 @@ async function sbSaveOrder(order) {
       saved_at: order.savedAt,
       nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
       nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
-      planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false, record_done: order.recordDone||false, bookmarked: order.bookmarked||false,
+      planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false, record_done: order.recordDone||false, bookmarked: order.bookmarked||false, progress: order.progress||[],
     });
     if (error) throw error;
     return true;
@@ -156,7 +156,7 @@ async function sbLoadOrders() {
       skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at,
       nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
       nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
-      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false, recordDone: row.record_done || false, bookmarked: row.bookmarked || false,
+      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false, recordDone: row.record_done || false, bookmarked: row.bookmarked || false, progress: row.progress || [],
     }));
   } catch(e) { console.log('Supabase読み込みエラー:', e); return null; }
 }
