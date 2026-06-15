@@ -2123,7 +2123,7 @@ async function renderOwnerPanel() {
   let loginLogs = [];
   if(sb){
     try{
-      const{data}=await sb.from(DB_TABLES.LOGS).select('*').order('logged_at',{ascending:false}).limit(30);
+      const{data}=await sb.from(DB_TABLES.LOGS).select('*').order('created_at',{ascending:false}).limit(30);
       loginLogs=data||[];
     }catch(e){}
   }
@@ -2189,7 +2189,7 @@ async function renderOwnerPanel() {
               <div style="font-size:14px;font-weight:700">${log.staff_name}</div>
               <div style="font-size:11px;color:var(--sub)">${log.action==='login'?'ログイン':'ログアウト'}</div>
             </div>
-            <div style="font-size:11px;color:var(--sub)">${new Date(log.logged_at).toLocaleString('ja-JP')}</div>
+            <div style="font-size:11px;color:var(--sub)">${new Date(log.created_at).toLocaleString('ja-JP')}</div>
           </div>`).join('')}
         ${loginLogs.length===0?'<div style="text-align:center;color:var(--sub);padding:20px">履歴がありません</div>':''}
       </div>
@@ -2243,4 +2243,4 @@ function initApp() {
 
 // ─── 起動 ─────────────────────────────────────────────────────
 initSupabase();
-initAuth();
+initAuth()
