@@ -1139,14 +1139,14 @@ async function loadList() {
     const remarksPreview=o.remarks?(()=>{const first=o.remarks.trim().split('\n')[0];return first?`<div style="font-size:13px;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📝 ${first}</div>`:''})():'';
     // ステータスボタン3つ
     const statuses=[['入庫待ち','#f97316'],['作業中','#ef4444'],['引渡済','#64748b']];
-    const statusBtns=statuses.map(([s,c])=>`<button onclick="event.stopPropagation();quickStatus('${o.id}','${s}')" style="flex:1;padding:10px 4px;font-size:13px;font-weight:700;background:${o.status===s?c:'#f8fafc'};color:${o.status===s?'#fff':'#94a3b8'};border:1.5px solid ${o.status===s?c:'#e2e8f0'};border-radius:10px;cursor:pointer;">${s}</button>`).join('');
+    const statusBtns=statuses.map(([s,c])=>`<button onclick="quickStatus('${o.id}','${s}');return false;" style="flex:1;padding:10px 4px;font-size:13px;font-weight:700;background:${o.status===s?c:'#f8fafc'};color:${o.status===s?'#fff':'#94a3b8'};border:1.5px solid ${o.status===s?c:'#e2e8f0'};border-radius:10px;cursor:pointer;">${s}</button>`).join('');
     // 進捗ボタン6つ
     const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['🚗','試運転OK','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
     const prog=o.progress||[];
-    const progressBtns=progressDef.map(([icon,key,bg,color])=>`<button onclick="event.stopPropagation();quickProgress('${o.id}','${key}')" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
+    const progressBtns=progressDef.map(([icon,key,bg,color])=>`<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
     // 私が担当しますボタン
-    const takeBtn=isUntaken?`<div onclick="event.stopPropagation();takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
-    return `<div class="order-item" onclick="showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;">
+    const takeBtn=isUntaken?`<div onclick="takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
+    return `<div class="order-item" onclick="if(event.target.tagName!=='BUTTON')showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;">
       <div class="top">
         <span class="order-num">${bookmarkBadge}${alertMark}${o.orderNum||'（番号なし）'}</span>
       </div>
