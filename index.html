@@ -89,7 +89,6 @@
         <div>
           <label>ステータス</label>
           <select id="r-status">
-            <option value="入庫待ち">入庫待ち</option>
             <option value="入庫待ち" selected>入庫待ち</option>
             <option value="作業中">作業中</option>
             <option value="完了">完了</option>
@@ -190,12 +189,7 @@
         <div id="check-prevent-okng"></div>
       </div>
     </div>
-    <div class="card" style="padding:0;overflow:hidden;">
-      <div class="card-title" onclick="toggleSection('work-body',this)" style="cursor:pointer;padding:14px;margin:0;border-radius:var(--radius) var(--radius) 0 0;user-select:none;">🔩 作業内容 <span style="float:right;font-size:14px;color:var(--sub);">▼</span></div>
-      <div id="work-body" style="display:none;padding:14px;border-top:1px solid var(--border);">
-        <div class="check-grid" id="check-work"></div>
-      </div>
-    </div>
+
     <div class="card">
       <div class="card-title">📝 備考・メモ</div>
       <textarea id="r-remarks" class="lg" placeholder="お客様への連絡事項、注意点など…"></textarea>
@@ -204,10 +198,7 @@
     <div class="card">
       <div class="card-title">📷 写真</div>
       <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-        <button class="btn btn-gray btn-sm" onclick="addPhotoSlot('r-photos','作業前')">＋ 作業前</button>
-        <button class="btn btn-gray btn-sm" onclick="addPhotoSlot('r-photos','作業中')">＋ 作業中</button>
-        <button class="btn btn-gray btn-sm" onclick="addPhotoSlot('r-photos','作業後')">＋ 作業後</button>
-        <button class="btn btn-gray btn-sm" onclick="addPhotoSlot('r-photos','納品書')">＋ 納品書</button>
+        <button class="btn btn-gray btn-sm" style="width:100%" onclick="addPhotoSlot('r-photos','写真')">📷 写真を追加</button>
       </div>
       <div id="r-photos" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
     </div>
@@ -217,42 +208,7 @@
     </div>
   </div>
 
-  <!-- ▼ 一覧 -->
-  <div class="panel" id="panel-list">
-    <div class="card" style="padding:10px">
-      <div class="filter-bar">
-        <input type="text" id="filterKeyword" placeholder="🔍 顧客名・車名・作業内容など" onkeyup="loadList()" style="flex:2;min-width:160px;font-size:14px">
-        <button class="btn btn-sm btn-gray" onclick="clearFilter()">全件</button>
-      </div>
-      <div class="filter-bar" style="margin-top:6px">
-        <select id="filterMonth" onchange="loadList()" style="flex:1;min-width:120px"><option value="">全月</option></select>
-        <select id="filterStatus" onchange="loadList()">
-          <option value="">全ステータス</option>
-          <option>入庫待ち</option><option>入庫待ち</option><option>作業中</option><option>引渡済</option>
-        </select>
-        <select id="filterType" onchange="loadList()">
-          <option value="">全種別</option>
-          <option value="repair">一般修理</option>
-          <option value="shakken">車検</option>
-          <option value="accident">事故修理</option>
-        </select>
-        <button class="btn btn-sm btn-primary" onclick="loadList()">🔄</button>
-      </div>
-      <div class="filter-bar" style="margin-top:6px">
-        <select id="filterExtra" onchange="loadList()" style="flex:1">
-          <option value="">絞り込みなし</option>
-          <option value="bookmark">⭐ ブックマーク</option>
-          <option value="noInvoice">📄 請求書未</option>
-          <option value="noRecord">📋 記録簿未</option>
-        </select>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub)">
-        <span class="sync-dot" id="syncDot2"></span>
-        <span id="listSyncLabel">読み込み中...</span>
-      </div>
-    </div>
-    <div id="orderList"><div class="loading"><span class="spinner"></span></div></div>
-  </div>
+
 
   <!-- ▼ 車検 -->
   <div class="panel" id="panel-shakken">
@@ -266,7 +222,6 @@
         <div>
           <label>ステータス</label>
           <select id="sk-status">
-            <option value="入庫待ち">入庫待ち</option>
             <option value="入庫待ち" selected>入庫待ち</option>
             <option value="完了">完了</option>
             <option value="引渡済">引渡済</option>
@@ -337,20 +292,8 @@
     </div>
     <div class="card">
       <div class="card-title">📷 写真</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div>
-          <div style="color:var(--sub);font-size:12px;margin-bottom:6px">納品書</div>
-          <input type="file" id="sk-photo-receipt" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto('sk-photo-receipt','sk-preview-receipt')">
-          <button class="btn btn-gray btn-sm" style="width:100%" onclick="document.getElementById('sk-photo-receipt').click()">📷 撮影 / 選択</button>
-          <div id="sk-preview-receipt" style="margin-top:6px"></div>
-        </div>
-        <div>
-          <div style="color:var(--sub);font-size:12px;margin-bottom:6px">修理箇所</div>
-          <input type="file" id="sk-photo-repair" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto('sk-photo-repair','sk-preview-repair')">
-          <button class="btn btn-gray btn-sm" style="width:100%" onclick="document.getElementById('sk-photo-repair').click()">📷 撮影 / 選択</button>
-          <div id="sk-preview-repair" style="margin-top:6px"></div>
-        </div>
-      </div>
+      <button class="btn btn-gray btn-sm" style="width:100%" onclick="addPhotoSlot('sk-photos','写真')">📷 写真を追加</button>
+      <div id="sk-photos" style="margin-top:8px"></div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" id="btnSaveShakken" onclick="saveShakken()" style="flex:2">💾 保存する</button>
@@ -370,7 +313,6 @@
         <div>
           <label>ステータス</label>
           <select id="ac-status">
-            <option value="入庫待ち">入庫待ち</option>
             <option value="入庫待ち" selected>入庫待ち</option>
             <option value="作業中">作業中</option>
             <option value="完了">完了</option>
@@ -427,21 +369,9 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-title">📷 写真・納品書</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div>
-          <div style="color:var(--sub);font-size:12px;margin-bottom:6px">修理箇所写真</div>
-          <input type="file" id="ac-photo-repair" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto('ac-photo-repair','ac-preview-repair')">
-          <button class="btn btn-gray btn-sm" style="width:100%" onclick="document.getElementById('ac-photo-repair').click()">📷 撮影 / 選択</button>
-          <div id="ac-preview-repair" style="margin-top:6px"></div>
-        </div>
-        <div>
-          <div style="color:var(--sub);font-size:12px;margin-bottom:6px">納品書</div>
-          <input type="file" id="ac-photo-receipt" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto('ac-photo-receipt','ac-preview-receipt')">
-          <button class="btn btn-gray btn-sm" style="width:100%" onclick="document.getElementById('ac-photo-receipt').click()">📷 撮影 / 選択</button>
-          <div id="ac-preview-receipt" style="margin-top:6px"></div>
-        </div>
-      </div>
+      <div class="card-title">📷 写真</div>
+      <button class="btn btn-gray btn-sm" style="width:100%" onclick="addPhotoSlot('ac-photos','写真')">📷 写真を追加</button>
+      <div id="ac-photos" style="margin-top:8px"></div>
     </div>
     <div class="card">
       <div class="card-title">📝 備考・メモ</div>
