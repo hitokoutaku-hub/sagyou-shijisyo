@@ -1359,8 +1359,8 @@ async function openShijishoView(order) {
       ${sakugyoHtml}${photoHtml}
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
         <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📷 写真を追加</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-          ${['作業前','作業中','作業後','納品書'].map(t=>`<button class="btn btn-gray btn-sm" onclick="addPhotoToOrder('${order.id}','shijisho-photos','${t}')">＋ ${t}</button>`).join('')}
+        <div style="margin-bottom:10px">
+          <button class="btn btn-gray btn-sm" style="width:100%" onclick="addPhotoToOrder('${order.id}','shijisho-photos','写真')">📷 写真を追加</button>
         </div>
         <div id="shijisho-photos" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
       </div>
