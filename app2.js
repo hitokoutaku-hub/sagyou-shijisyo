@@ -134,11 +134,18 @@ async function sbSaveOrder(order) {
   }
 }
 
-async function sbLoadOrders() {
+async function sbLoadOrders(loadAll) {
   if (!sb) return null;
   try {
-    const { data, error } = await sb
-      .from(DB_TABLES.KIROKU).select('*').order('created_at', { ascending: false });
+    let query = sb.from(DB_TABLES.KIROKU).select('*').order('created_at', { ascending: false });
+    if (!loadAll) {
+      // デフォルトは「引渡済」以外、または直近3ヶ月の引渡済のみ読み込む（高速化）
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      const cutoff = threeMonthsAgo.toISOString();
+      query = query.or(`status.neq.引渡済,created_at.gte.${cutoff}`);
+    }
+    const { data, error } = await query;
     if (error) throw error;
     return data.map(row => ({
       id: row.id, orderNum: row.order_num, type: row.order_type, status: row.status,
@@ -1052,6 +1059,17 @@ function clearShakken() {
 }
 
 // ─── 一覧 ────────────────────────────────────────────────────
+let _allMonthsLoaded = false;
+async function ensureAllMonthsLoaded() {
+  if (_allMonthsLoaded || !sbReady) return;
+  const sbOrders = await sbLoadOrders(true);
+  if (sbOrders !== null) {
+    S.orders = sbOrders;
+    _allMonthsLoaded = true;
+    updateMonthFilter();
+  }
+}
+
 function updateMonthFilter() {
   const sel=document.getElementById('filterMonth'); if(!sel) return;
   const current=sel.value;
@@ -1076,13 +1094,18 @@ function clearFilter() {
   document.getElementById('filterStatus').value='';
   document.getElementById('filterKeyword').value='';
   document.getElementById('filterType').value='';
-  loadList();
+  loadList(true);
 }
 
-async function loadList() {
+async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
-  if (sbReady) { const sbOrders=await sbLoadOrders(); if(sbOrders!==null) S.orders=sbOrders; }
+  const filterMonth0  =document.getElementById('filterMonth')?.value;
+  const filterStatus0 =document.getElementById('filterStatus')?.value;
+  // 月指定や「引渡済」検索、検索キーワードがある時は全件読み込みが必要
+  const filterKeyword0=document.getElementById('filterKeyword')?.value.trim();
+  const needAll = forceLoadAll || !!filterMonth0 || filterStatus0==='引渡済' || !!filterKeyword0 || _allMonthsLoaded;
+  if (sbReady) { const sbOrders=await sbLoadOrders(needAll); if(sbOrders!==null) { S.orders=sbOrders; if(needAll) _allMonthsLoaded=true; } }
   const filterMonth  =document.getElementById('filterMonth')?.value;
   const filterStatus =document.getElementById('filterStatus')?.value;
   const filterKeyword=document.getElementById('filterKeyword')?.value.trim();
