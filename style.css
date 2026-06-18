@@ -272,6 +272,13 @@ input, select, textarea {
   transition: .15s;
   font-family: inherit;
   line-height: 1.5;
+  box-sizing: border-box;
+}
+input[type="time"], input[type="date"] {
+  height: 54px;
+  max-height: 54px;
+  -webkit-appearance: none;
+  appearance: none;
 }
 select option { background: #ffffff; color: #1e2433; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); background: #ffffff !important; color: #1e2433 !important; }
