@@ -338,6 +338,9 @@ textarea.lg { min-height: 180px; }
 .order-num-display .label { font-size: 11px; color: var(--sub); margin-top: 2px; }
 
 /* ─── ボタン ────────────────────────────────────────────────── */
+button { transition: transform .1s; }
+button:active { transform: scale(0.94); }
+
 .btn {
   padding: 11px 18px;
   border: none;
@@ -413,7 +416,7 @@ textarea.lg { min-height: 180px; }
   cursor: pointer;
   transition: .12s;
 }
-.order-item:active { border-color: var(--accent); background: var(--card2); }
+.order-item:active { border-color: var(--accent); background: var(--card2); transform: scale(0.98); }
 .order-item .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .order-num  { color: var(--accent); font-weight: 800; font-size: 15px; }
 .order-info { color: var(--sub); font-size: 13px; line-height: 1.6; }
