@@ -85,6 +85,12 @@ function showToast(msg, type = 'info', duration = 3000) {
   }, duration);
 }
 
+function hideToast() {
+  const toast = document.getElementById('toast');
+  if (toast) toast.classList.remove('show');
+  if (toastTimer) clearTimeout(toastTimer);
+}
+
 // ─── 二重保存防止 ─────────────────────────────────────────────
 let isSaving = false;
 
@@ -134,11 +140,26 @@ async function sbSaveOrder(order) {
   }
 }
 
-async function sbLoadOrders() {
+async function sbLoadOrders(loadAll, monthFilter) {
   if (!sb) return null;
   try {
-    const { data, error } = await sb
-      .from(DB_TABLES.KIROKU).select('*').order('created_at', { ascending: false });
+    let query = sb.from(DB_TABLES.KIROKU).select('*').order('created_at', { ascending: false });
+    if (monthFilter) {
+      // 指定月の入庫日のみ（YYYY-MM形式）サーバー側で絞り込む（高速化）
+      const start = monthFilter + '-01';
+      const [y, m] = monthFilter.split('-').map(Number);
+      const nextMonth = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
+      query = query.gte('date_in', start).lt('date_in', nextMonth);
+    } else if (!loadAll) {
+      // デフォルトは今月の入庫分のみ（高速化）
+      const now = new Date();
+      const thisMonth = now.toISOString().substring(0,7);
+      const start = thisMonth + '-01';
+      const y = now.getFullYear(), m = now.getMonth() + 1;
+      const nextMonth = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
+      query = query.gte('date_in', start).lt('date_in', nextMonth);
+    }
+    const { data, error } = await query;
     if (error) throw error;
     return data.map(row => ({
       id: row.id, orderNum: row.order_num, type: row.order_type, status: row.status,
@@ -1052,6 +1073,17 @@ function clearShakken() {
 }
 
 // ─── 一覧 ────────────────────────────────────────────────────
+let _allMonthsLoaded = false;
+async function ensureAllMonthsLoaded() {
+  if (_allMonthsLoaded || !sbReady) return;
+  const sbOrders = await sbLoadOrders(true);
+  if (sbOrders !== null) {
+    S.orders = sbOrders;
+    _allMonthsLoaded = true;
+    updateMonthFilter();
+  }
+}
+
 function updateMonthFilter() {
   const sel=document.getElementById('filterMonth'); if(!sel) return;
   const current=sel.value;
@@ -1076,13 +1108,32 @@ function clearFilter() {
   document.getElementById('filterStatus').value='';
   document.getElementById('filterKeyword').value='';
   document.getElementById('filterType').value='';
-  loadList();
+  loadList(true);
 }
 
-async function loadList() {
+async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
-  if (sbReady) { const sbOrders=await sbLoadOrders(); if(sbOrders!==null) S.orders=sbOrders; }
+  const filterMonth0  =document.getElementById('filterMonth')?.value;
+  const filterKeyword0=document.getElementById('filterKeyword')?.value.trim();
+  if (sbReady && !_allMonthsLoaded) {
+    if (filterKeyword0 || forceLoadAll) {
+      // 検索キーワードがある場合・全件ボタン押下時は全月対象
+      const sbOrders = await sbLoadOrders(true);
+      if (sbOrders !== null) { S.orders = sbOrders; _allMonthsLoaded = true; }
+    } else if (filterMonth0) {
+      // 月が指定されていればその月だけサーバー側で絞り込む
+      const sbOrders = await sbLoadOrders(false, filterMonth0);
+      if (sbOrders !== null) S.orders = sbOrders;
+    } else {
+      // デフォルトは今月分だけ（高速）
+      const sbOrders = await sbLoadOrders(false);
+      if (sbOrders !== null) S.orders = sbOrders;
+    }
+  } else if (sbReady && _allMonthsLoaded) {
+    const sbOrders = await sbLoadOrders(true);
+    if (sbOrders !== null) S.orders = sbOrders;
+  }
   const filterMonth  =document.getElementById('filterMonth')?.value;
   const filterStatus =document.getElementById('filterStatus')?.value;
   const filterKeyword=document.getElementById('filterKeyword')?.value.trim();
@@ -1146,11 +1197,11 @@ async function loadList() {
     const progressBtns=progressDef.map(([icon,key,bg,color])=>`<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
     // 私が担当しますボタン
     const takeBtn=isUntaken?`<div onclick="takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
-    return `<div class="order-item" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;">
+    return `<div class="order-item" onclick="if(!event.target.closest('button'))showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;cursor:pointer;">
       <div class="top">
         <span class="order-num">${bookmarkBadge}${alertMark}${o.orderNum||'（番号なし）'}</span>
       </div>
-      <div onclick="showDetail('${o.id}')" style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;cursor:pointer;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
+      <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
         <span>📅 ${o.dateIn||'未設定'}</span>
         <span>👤 ${o.mechName||'未定'}${subNames?'・'+subNames:''}</span>
@@ -1209,18 +1260,43 @@ async function loadList() {
 async function quickStatus(orderId, newStatus) {
   const order = S.orders.find(o => o.id === orderId);
   if (!order) return;
+  // 処理中表示（通信が遅い時も「動いている」とわかるように）
+  document.querySelectorAll(`button[onclick*="quickStatus('${orderId}','${newStatus}')"]`).forEach(btn => {
+    btn.dataset.origText = btn.textContent;
+    btn.textContent = '⏳ 送信中...';
+    btn.disabled = true;
+  });
   order.status = newStatus;
   saveState();
   if (sb) {
     try { await sb.from(DB_TABLES.KIROKU).update({ status: newStatus }).eq('id', orderId); } catch(e) {}
   }
-  showToast(`ステータスを「${newStatus}」に変更しました`, 'success');
-  loadList();
+  showToast(`✅ ステータスを「${newStatus}」に変更しました`, 'success');
+  // ステータスボタンの見た目だけ即時更新（全件再読み込みしない）
+  const statuses = [['入庫待ち','#f97316'],['作業中','#ef4444'],['引渡済','#64748b']];
+  document.querySelectorAll(`button[onclick*="quickStatus('${orderId}'"]`).forEach(btn => {
+    const m = btn.getAttribute('onclick')?.match(/quickStatus\('[^']+','([^']+)'\)/);
+    if (!m) return;
+    const s = m[1];
+    const c = statuses.find(x => x[0] === s)?.[1] || '#94a3b8';
+    const on = s === newStatus;
+    btn.style.background = on ? c : '#f8fafc';
+    btn.style.color = on ? '#fff' : '#94a3b8';
+    btn.style.border = `1.5px solid ${on ? c : '#e2e8f0'}`;
+    btn.textContent = btn.dataset.origText || s;
+    btn.disabled = false;
+  });
 }
 
 async function quickProgress(orderId, key) {
   const order = S.orders.find(o => o.id === orderId);
   if (!order) return;
+  // 処理中表示（通信が遅い時も「動いている」とわかるように）
+  document.querySelectorAll(`button[onclick*="quickProgress('${orderId}','${key}')"]`).forEach(btn => {
+    btn.dataset.origText = btn.textContent;
+    btn.textContent = '⏳ 送信中...';
+    btn.disabled = true;
+  });
   order.progress = order.progress || [];
   const has = order.progress.includes(key);
   if (has) { order.progress = order.progress.filter(k => k !== key); }
@@ -1241,6 +1317,8 @@ async function quickProgress(orderId, key) {
         btn.style.background = on ? bg : '#f8fafc';
         btn.style.color = on ? color : '#94a3b8';
         btn.style.border = `1.5px solid ${on ? color : '#e2e8f0'}`;
+        btn.textContent = btn.dataset.origText || `${icon} ${k}`;
+        btn.disabled = false;
       });
     });
   }
@@ -1281,7 +1359,34 @@ function tagList(items,color) {
   return `<div style="display:flex;flex-wrap:wrap;gap:6px">${items.map(i=>`<span style="background:rgba(240,160,48,0.15);border:1px solid ${color};border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:${color}">${i}</span>`).join('')}</div>`;
 }
 
-async function openShijishoView(order) {
+async function buildPhotoSectionAsync(orderId) {
+  const photos = await loadPhotosForOrder(orderId);
+  const ph = document.getElementById('photo-section-placeholder');
+  if (!ph) return; // 画面が既に閉じられている場合
+  if (!photos.length) { ph.innerHTML=''; return; }
+  const typeOrder=['作業前','作業中','作業後','納品書','写真'];
+  const grouped={}; photos.forEach(p=>{ if(!grouped[p.photo_type]) grouped[p.photo_type]=[]; grouped[p.photo_type].push(p); });
+  const allPhotos=[]; typeOrder.forEach(t=>{ if(grouped[t]) grouped[t].forEach(p=>allPhotos.push(p)); });
+  Object.keys(grouped).forEach(t=>{ if(!typeOrder.includes(t)) grouped[t].forEach(p=>allPhotos.push(p)); });
+  const imgs=allPhotos.map((p,i)=>`
+    <div id="photo-slot-view-${i}">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}" data-id="${p.id||''}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">
+        <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
+        <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
+      </div>
+      <img src="${p.photo_b64}" data-pid="${p.id||''}" data-ptype="${p.photo_type}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen(this.src,this.dataset.ptype,this.dataset.pid)">
+    </div>`).join('');
+  ph.outerHTML = shijishoSection('📷 写真',`
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(true)">✅ 全選択</button>
+      <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(false)">⬜ 全解除</button>
+      <button class="btn btn-primary btn-sm" onclick="downloadSelectedPhotos()">📥 ダウンロード</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>`);
+}
+
+function openShijishoView(order) {
   const typeLabel=order.type==='shakken'?'車検指示書':order.type==='accident'?'事故修理指示書':'作業指示書';
   const subNames=(order.subStaff||[]).map(s=>s.name).join('・');
   let sakugyoHtml='';
@@ -1304,30 +1409,8 @@ async function openShijishoView(order) {
   }
   if(order.remarks) sakugyoHtml+=shijishoSection('📝 備考・メモ',`<div style="white-space:pre-wrap;font-size:15px;line-height:1.8;background:var(--bg);padding:12px;border-radius:8px">${order.remarks}</div>`);
 
-  let photoHtml='';
-  const photos=await loadPhotosForOrder(order.id);
-  if(photos.length) {
-    const typeOrder=['作業前','作業中','作業後','納品書','写真'];
-    const grouped={}; photos.forEach(p=>{ if(!grouped[p.photo_type]) grouped[p.photo_type]=[]; grouped[p.photo_type].push(p); });
-    const allPhotos=[]; typeOrder.forEach(t=>{ if(grouped[t]) grouped[t].forEach(p=>allPhotos.push(p)); });
-    Object.keys(grouped).forEach(t=>{ if(!typeOrder.includes(t)) grouped[t].forEach(p=>allPhotos.push(p)); });
-    const imgs=allPhotos.map((p,i)=>`
-      <div id="photo-slot-view-${i}">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}" data-id="${p.id||''}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">
-          <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
-          <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
-        </div>
-        <img src="${p.photo_b64}" data-pid="${p.id||''}" data-ptype="${p.photo_type}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen(this.src,this.dataset.ptype,this.dataset.pid)">
-      </div>`).join('');
-    photoHtml=shijishoSection('📷 写真',`
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(true)">✅ 全選択</button>
-        <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(false)">⬜ 全解除</button>
-        <button class="btn btn-primary btn-sm" onclick="downloadSelectedPhotos()">📥 ダウンロード</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>`);
-  }
+  let photoHtml='<div id="photo-section-placeholder"></div>';
+  buildPhotoSectionAsync(order.id);
 
   const alreadyInOrder = order.mechId===currentUser?.id || (order.subStaff||[]).some(s=>s.id===currentUser?.id);
   const joinBtn = !alreadyInOrder ? `
@@ -1387,12 +1470,31 @@ function addPhotoToOrder(orderId,containerId,type) {
   document.body.appendChild(input);
   input.onchange=async()=>{
     const container=document.getElementById(containerId);
+    const fileCount = input.files.length;
+    if (fileCount === 0) { input.remove(); return; }
+    showToast(`📷 ${fileCount}枚アップロード中...`, 'info', 60000);
+    let doneCount = 0;
     Array.from(input.files).forEach(file=>{
       _compressAndRun(file,async compressed=>{
         const div=document.createElement('div'); div.style.cssText='background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px';
         div.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px">${type}</div><img src="${compressed}" style="width:100%;border-radius:6px"><div style="color:var(--sub);font-size:10px;margin-top:3px;text-align:center">保存中...</div>`;
         if(container) container.appendChild(div);
-        if(sb){try{const{error}=await sb.from(DB_TABLES.PHOTOS).insert([{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}]);if(!error){const s=div.querySelector('div:last-child');if(s)s.textContent='保存完了';}}catch(e){}}
+        if(sb){
+          try{
+            const{error}=await sb.from(DB_TABLES.PHOTOS).insert([{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}]);
+            const s=div.querySelector('div:last-child');
+            if(!error){ if(s){s.textContent='✅ 保存完了'; s.style.color='var(--ok)'; s.style.fontWeight='700';} }
+            else { if(s){s.textContent='❌ 保存失敗'; s.style.color='var(--danger)'; s.style.fontWeight='700';} }
+          } catch(e) {
+            const s=div.querySelector('div:last-child');
+            if(s){s.textContent='❌ 保存失敗'; s.style.color='var(--danger)'; s.style.fontWeight='700';}
+          }
+        }
+        doneCount++;
+        if (doneCount === fileCount) {
+          hideToast();
+          showToast(`✅ ${fileCount}枚の写真を保存しました`, 'success', 3000);
+        }
       });
     });
     input.remove();
