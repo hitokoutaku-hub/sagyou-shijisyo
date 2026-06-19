@@ -134,16 +134,24 @@ async function sbSaveOrder(order) {
   }
 }
 
-async function sbLoadOrders(loadAll) {
+async function sbLoadOrders(loadAll, monthFilter) {
   if (!sb) return null;
   try {
     let query = sb.from(DB_TABLES.KIROKU).select('*').order('created_at', { ascending: false });
-    if (!loadAll) {
-      // デフォルトは「引渡済」以外、または直近3ヶ月の引渡済のみ読み込む（高速化）
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      const cutoff = threeMonthsAgo.toISOString();
-      query = query.or(`status.neq.引渡済,created_at.gte.${cutoff}`);
+    if (monthFilter) {
+      // 指定月の入庫日のみ（YYYY-MM形式）サーバー側で絞り込む（高速化）
+      const start = monthFilter + '-01';
+      const [y, m] = monthFilter.split('-').map(Number);
+      const nextMonth = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
+      query = query.gte('date_in', start).lt('date_in', nextMonth);
+    } else if (!loadAll) {
+      // デフォルトは今月の入庫分のみ（高速化）
+      const now = new Date();
+      const thisMonth = now.toISOString().substring(0,7);
+      const start = thisMonth + '-01';
+      const y = now.getFullYear(), m = now.getMonth() + 1;
+      const nextMonth = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
+      query = query.gte('date_in', start).lt('date_in', nextMonth);
     }
     const { data, error } = await query;
     if (error) throw error;
@@ -1101,11 +1109,25 @@ async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
   const filterMonth0  =document.getElementById('filterMonth')?.value;
-  const filterStatus0 =document.getElementById('filterStatus')?.value;
-  // 月指定や「引渡済」検索、検索キーワードがある時は全件読み込みが必要
   const filterKeyword0=document.getElementById('filterKeyword')?.value.trim();
-  const needAll = forceLoadAll || !!filterMonth0 || filterStatus0==='引渡済' || !!filterKeyword0 || _allMonthsLoaded;
-  if (sbReady) { const sbOrders=await sbLoadOrders(needAll); if(sbOrders!==null) { S.orders=sbOrders; if(needAll) _allMonthsLoaded=true; } }
+  if (sbReady && !_allMonthsLoaded) {
+    if (filterKeyword0 || forceLoadAll) {
+      // 検索キーワードがある場合・全件ボタン押下時は全月対象
+      const sbOrders = await sbLoadOrders(true);
+      if (sbOrders !== null) { S.orders = sbOrders; _allMonthsLoaded = true; }
+    } else if (filterMonth0) {
+      // 月が指定されていればその月だけサーバー側で絞り込む
+      const sbOrders = await sbLoadOrders(false, filterMonth0);
+      if (sbOrders !== null) S.orders = sbOrders;
+    } else {
+      // デフォルトは今月分だけ（高速）
+      const sbOrders = await sbLoadOrders(false);
+      if (sbOrders !== null) S.orders = sbOrders;
+    }
+  } else if (sbReady && _allMonthsLoaded) {
+    const sbOrders = await sbLoadOrders(true);
+    if (sbOrders !== null) S.orders = sbOrders;
+  }
   const filterMonth  =document.getElementById('filterMonth')?.value;
   const filterStatus =document.getElementById('filterStatus')?.value;
   const filterKeyword=document.getElementById('filterKeyword')?.value.trim();
