@@ -1153,8 +1153,11 @@ async function loadList(forceLoadAll) {
   if(filterKeyword) orders=orders.filter(o=>
     (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
     (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword));
-  const _n=new Date();const _j=new Date(_n.getTime()+9*60*60*1000);const _td=_j.toISOString().split('T')[0];
-  const _tmD=new Date(_j);_tmD.setDate(_tmD.getDate()+1);const _tm=_tmD.toISOString().split('T')[0];
+  const _n=new Date();
+  const _nParts=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(_n);
+  const _td=`${_nParts.find(p=>p.type==='year').value}-${_nParts.find(p=>p.type==='month').value}-${_nParts.find(p=>p.type==='day').value}`;
+  const _tmDateObj=new Date(`${_td}T12:00:00Z`); _tmDateObj.setDate(_tmDateObj.getDate()+1);
+  const _tm=_tmDateObj.toISOString().split('T')[0];
   const statusOrder={'作業中':0,'車検中':1,'入庫中':2,'完了':5,'引渡済':6};
   function nyukoOrder(o){
     if(o.status!=='入庫待ち')return statusOrder[o.status]??99;
@@ -1172,9 +1175,12 @@ async function loadList(forceLoadAll) {
   const el=document.getElementById('listSyncLabel'); if(el) el.textContent=sbReady?'クラウド同期済み':'ローカル保存';
   if(!orders.length) { c.innerHTML='<div class="empty">📋 指示書がありません</div>'; return; }
 
-  const _now=new Date();const _jst=new Date(_now.getTime()+9*60*60*1000);const _today=_jst.toISOString().split('T')[0];
-  const _tomorrowD=new Date(_jst);_tomorrowD.setDate(_tomorrowD.getDate()+1);const _tomorrow=_tomorrowD.toISOString().split('T')[0];
+  const _today=_td;
+  const _tomorrow=_tm;
   const weekdays=['日','月','火','水','木','金','土'];
+  // 正午のUTC時刻にしてからgetDay()すれば日付ズレなく曜日を取得できる
+  const _todayWeekday=weekdays[new Date(`${_today}T12:00:00Z`).getDay()];
+  const _tomorrowWeekday=weekdays[new Date(`${_tomorrow}T12:00:00Z`).getDay()];
 
   function renderOrderCard(o) {
     const subNames=(o.subStaff||[]).map(s=>s.name).join('・');
@@ -1243,8 +1249,8 @@ async function loadList(forceLoadAll) {
   const futureOrders=orders.filter(o=>o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
   const doneOrders=orders.filter(o=>o.status==='完了'||o.status==='引渡済');
 
-  const todayLabel=`今日の入庫予定　${_today.slice(5).replace('-','/')}（${weekdays[_jst.getDay()]}）`;
-  const tomorrowLabel=`明日の入庫予定　${_tomorrow.slice(5).replace('-','/')}（${weekdays[new Date(_jst.getTime()+86400000).getDay()]}）`;
+  const todayLabel=`今日の入庫予定　${_today.slice(5).replace('-','/')}（${_todayWeekday}）`;
+  const tomorrowLabel=`明日の入庫予定　${_tomorrow.slice(5).replace('-','/')}（${_tomorrowWeekday}）`;
 
   c.innerHTML=
     renderGroup('現在進行中','🔨','#fef2f2','#991b1b','#ef4444','#ef4444',inProgressOrders)+
