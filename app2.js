@@ -134,11 +134,18 @@ async function sbSaveOrder(order) {
   }
 }
 
-async function sbLoadOrders() {
+async function sbLoadOrders(loadAll) {
   if (!sb) return null;
   try {
-    const { data, error } = await sb
-      .from(DB_TABLES.KIROKU).select('*').order('created_at', { ascending: false });
+    let query = sb.from(DB_TABLES.KIROKU).select('*').order('created_at', { ascending: false });
+    if (!loadAll) {
+      // デフォルトは「引渡済」以外、または直近3ヶ月の引渡済のみ読み込む（高速化）
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      const cutoff = threeMonthsAgo.toISOString();
+      query = query.or(`status.neq.引渡済,created_at.gte.${cutoff}`);
+    }
+    const { data, error } = await query;
     if (error) throw error;
     return data.map(row => ({
       id: row.id, orderNum: row.order_num, type: row.order_type, status: row.status,
@@ -1052,6 +1059,17 @@ function clearShakken() {
 }
 
 // ─── 一覧 ────────────────────────────────────────────────────
+let _allMonthsLoaded = false;
+async function ensureAllMonthsLoaded() {
+  if (_allMonthsLoaded || !sbReady) return;
+  const sbOrders = await sbLoadOrders(true);
+  if (sbOrders !== null) {
+    S.orders = sbOrders;
+    _allMonthsLoaded = true;
+    updateMonthFilter();
+  }
+}
+
 function updateMonthFilter() {
   const sel=document.getElementById('filterMonth'); if(!sel) return;
   const current=sel.value;
@@ -1076,13 +1094,18 @@ function clearFilter() {
   document.getElementById('filterStatus').value='';
   document.getElementById('filterKeyword').value='';
   document.getElementById('filterType').value='';
-  loadList();
+  loadList(true);
 }
 
-async function loadList() {
+async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
-  if (sbReady) { const sbOrders=await sbLoadOrders(); if(sbOrders!==null) S.orders=sbOrders; }
+  const filterMonth0  =document.getElementById('filterMonth')?.value;
+  const filterStatus0 =document.getElementById('filterStatus')?.value;
+  // 月指定や「引渡済」検索、検索キーワードがある時は全件読み込みが必要
+  const filterKeyword0=document.getElementById('filterKeyword')?.value.trim();
+  const needAll = forceLoadAll || !!filterMonth0 || filterStatus0==='引渡済' || !!filterKeyword0 || _allMonthsLoaded;
+  if (sbReady) { const sbOrders=await sbLoadOrders(needAll); if(sbOrders!==null) { S.orders=sbOrders; if(needAll) _allMonthsLoaded=true; } }
   const filterMonth  =document.getElementById('filterMonth')?.value;
   const filterStatus =document.getElementById('filterStatus')?.value;
   const filterKeyword=document.getElementById('filterKeyword')?.value.trim();
@@ -1281,7 +1304,34 @@ function tagList(items,color) {
   return `<div style="display:flex;flex-wrap:wrap;gap:6px">${items.map(i=>`<span style="background:rgba(240,160,48,0.15);border:1px solid ${color};border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:${color}">${i}</span>`).join('')}</div>`;
 }
 
-async function openShijishoView(order) {
+async function buildPhotoSectionAsync(orderId) {
+  const photos = await loadPhotosForOrder(orderId);
+  const ph = document.getElementById('photo-section-placeholder');
+  if (!ph) return; // 画面が既に閉じられている場合
+  if (!photos.length) { ph.innerHTML=''; return; }
+  const typeOrder=['作業前','作業中','作業後','納品書','写真'];
+  const grouped={}; photos.forEach(p=>{ if(!grouped[p.photo_type]) grouped[p.photo_type]=[]; grouped[p.photo_type].push(p); });
+  const allPhotos=[]; typeOrder.forEach(t=>{ if(grouped[t]) grouped[t].forEach(p=>allPhotos.push(p)); });
+  Object.keys(grouped).forEach(t=>{ if(!typeOrder.includes(t)) grouped[t].forEach(p=>allPhotos.push(p)); });
+  const imgs=allPhotos.map((p,i)=>`
+    <div id="photo-slot-view-${i}">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}" data-id="${p.id||''}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">
+        <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
+        <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
+      </div>
+      <img src="${p.photo_b64}" data-pid="${p.id||''}" data-ptype="${p.photo_type}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen(this.src,this.dataset.ptype,this.dataset.pid)">
+    </div>`).join('');
+  ph.outerHTML = shijishoSection('📷 写真',`
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(true)">✅ 全選択</button>
+      <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(false)">⬜ 全解除</button>
+      <button class="btn btn-primary btn-sm" onclick="downloadSelectedPhotos()">📥 ダウンロード</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>`);
+}
+
+function openShijishoView(order) {
   const typeLabel=order.type==='shakken'?'車検指示書':order.type==='accident'?'事故修理指示書':'作業指示書';
   const subNames=(order.subStaff||[]).map(s=>s.name).join('・');
   let sakugyoHtml='';
@@ -1304,30 +1354,8 @@ async function openShijishoView(order) {
   }
   if(order.remarks) sakugyoHtml+=shijishoSection('📝 備考・メモ',`<div style="white-space:pre-wrap;font-size:15px;line-height:1.8;background:var(--bg);padding:12px;border-radius:8px">${order.remarks}</div>`);
 
-  let photoHtml='';
-  const photos=await loadPhotosForOrder(order.id);
-  if(photos.length) {
-    const typeOrder=['作業前','作業中','作業後','納品書','写真'];
-    const grouped={}; photos.forEach(p=>{ if(!grouped[p.photo_type]) grouped[p.photo_type]=[]; grouped[p.photo_type].push(p); });
-    const allPhotos=[]; typeOrder.forEach(t=>{ if(grouped[t]) grouped[t].forEach(p=>allPhotos.push(p)); });
-    Object.keys(grouped).forEach(t=>{ if(!typeOrder.includes(t)) grouped[t].forEach(p=>allPhotos.push(p)); });
-    const imgs=allPhotos.map((p,i)=>`
-      <div id="photo-slot-view-${i}">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}" data-id="${p.id||''}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">
-          <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
-          <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
-        </div>
-        <img src="${p.photo_b64}" data-pid="${p.id||''}" data-ptype="${p.photo_type}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen(this.src,this.dataset.ptype,this.dataset.pid)">
-      </div>`).join('');
-    photoHtml=shijishoSection('📷 写真',`
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(true)">✅ 全選択</button>
-        <button class="btn btn-gray btn-sm" onclick="selectAllPhotos(false)">⬜ 全解除</button>
-        <button class="btn btn-primary btn-sm" onclick="downloadSelectedPhotos()">📥 ダウンロード</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${imgs}</div>`);
-  }
+  let photoHtml='<div id="photo-section-placeholder"></div>';
+  buildPhotoSectionAsync(order.id);
 
   const alreadyInOrder = order.mechId===currentUser?.id || (order.subStaff||[]).some(s=>s.id===currentUser?.id);
   const joinBtn = !alreadyInOrder ? `
