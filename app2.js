@@ -1198,7 +1198,7 @@ async function loadList(forceLoadAll) {
     const statuses=[['入庫待ち','#f97316'],['作業中','#ef4444'],['引渡済','#64748b']];
     const statusBtns=statuses.map(([s,c])=>`<button onclick="quickStatus('${o.id}','${s}');return false;" style="flex:1;padding:10px 4px;font-size:13px;font-weight:700;background:${o.status===s?c:'#f8fafc'};color:${o.status===s?'#fff':'#94a3b8'};border:1.5px solid ${o.status===s?c:'#e2e8f0'};border-radius:10px;cursor:pointer;">${s}</button>`).join('');
     // 進捗ボタン6つ
-    const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['🚗','試運転OK','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
+    const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['📘','3ヵ月点検記録簿済','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
     const prog=o.progress||[];
     const progressBtns=progressDef.map(([icon,key,bg,color])=>`<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
     // 私が担当しますボタン
@@ -1316,7 +1316,7 @@ async function quickProgress(orderId, key) {
   const c = document.getElementById('orderList');
   if (c) {
     // ボタンの色だけ即時更新
-    const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['🚗','試運転OK','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
+    const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['📘','3ヵ月点検記録簿済','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
     progressDef.forEach(([icon, k, bg, color]) => {
       const on = order.progress.includes(k);
       document.querySelectorAll(`button[onclick*="quickProgress('${orderId}','${k}')"]`).forEach(btn => {
