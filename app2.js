@@ -1141,7 +1141,9 @@ async function loadList(forceLoadAll) {
   updateMonthFilter();
   let orders=[...S.orders];
   if(filterMonth)   orders=orders.filter(o=>(o.dateIn||o.savedAt||'').startsWith(filterMonth));
-  if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
+  if(filterStatus==='未請求書') orders=orders.filter(o=>!(o.progress||[]).includes('請求書済'));
+  else if(filterStatus==='未3ヵ月点検') orders=orders.filter(o=>!(o.progress||[]).includes('3ヵ月点検記録簿済'));
+  else if(filterStatus) orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
   const filterExtra = document.getElementById('filterExtra')?.value;
   if(filterExtra==='bookmark') orders=orders.filter(o=>o.bookmarked);
