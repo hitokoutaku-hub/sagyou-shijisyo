@@ -1146,7 +1146,7 @@ async function loadList(forceLoadAll) {
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
   const filterExtra = document.getElementById('filterExtra')?.value;
   if(filterExtra==='bookmark') orders=orders.filter(o=>o.bookmarked);
-  if(filterExtra==='noInvoice') orders=orders.filter(o=>!o.invoiceDone);
+  if(filterExtra==='noInvoice') orders=orders.filter(o=>!o.invoiceDone && !(o.progress||[]).includes('請求書済'));
   if(filterExtra==='noRecord') orders=orders.filter(o=>{
     const is3m = [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
     return is3m && !o.recordDone;
@@ -1174,6 +1174,35 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const el=document.getElementById('listSyncLabel'); if(el) el.textContent=sbReady?'クラウド同期済み':'ローカル保存';
+
+  // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
+  const filterExtraVal=document.getElementById('filterExtra')?.value;
+  const progressBarEl=document.getElementById('filterProgressBar')||(() => {
+    const div=document.createElement('div'); div.id='filterProgressBar';
+    div.style.cssText='padding:10px 16px 4px;display:none';
+    c.parentNode.insertBefore(div, c); return div;
+  })();
+  if(filterExtraVal==='noInvoice'||filterExtraVal==='noRecord'){
+    const label=filterExtraVal==='noInvoice'?'請求書済':'3ヵ月点検済';
+    const allOrders=S.orders||[];
+    const total=allOrders.length;
+    const doneCount=filterExtraVal==='noInvoice'
+      ? allOrders.filter(o=>o.invoiceDone||(o.progress||[]).includes('請求書済')).length
+      : allOrders.filter(o=>(o.progress||[]).includes('3ヵ月点検記録簿済')).length;
+    const pct=total?Math.round(doneCount/total*100):0;
+    progressBarEl.style.display='block';
+    progressBarEl.innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:13px;font-weight:700;color:#374151">
+        <span>📄 ${label} ${doneCount}/${total}件</span>
+        <span style="color:${pct===100?'#16a34a':'#f97316'}">残り${total-doneCount}件 ${pct}%</span>
+      </div>
+      <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden">
+        <div style="background:${pct===100?'#22c55e':'#f97316'};width:${pct}%;height:100%;border-radius:99px;transition:width 0.4s"></div>
+      </div>`;
+  } else {
+    progressBarEl.style.display='none';
+  }
+
   if(!orders.length) { c.innerHTML='<div class="empty">📋 指示書がありません</div>'; return; }
 
   const _today=_td;
