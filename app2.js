@@ -1106,6 +1106,7 @@ function updateMonthFilter() {
 
 function clearFilter() {
   document.getElementById('filterStatus').value='';
+  const fe=document.getElementById('filterExtra'); if(fe) fe.value='';
   document.getElementById('filterKeyword').value='';
   document.getElementById('filterType').value='';
   loadList(true);
@@ -1431,7 +1432,6 @@ function openShijishoView(order) {
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button onclick="toggleBookmark('${order.id}')" style="background:${order.bookmarked?'#f3e8ff':'#f8fafc'};border:1.5px solid ${order.bookmarked?'#7e22ce':'var(--border)'};border-radius:10px;padding:10px 14px;font-size:18px;cursor:pointer;">${order.bookmarked?'⭐':'☆'}</button>
-        <button onclick="if(confirm('この指示書を削除しますか？')){deleteOrder('${order.id}');closeShijishoView();loadList();}" style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 14px;font-size:18px;cursor:pointer;">🗑️</button>
         <button onclick="openEditModal('${order.id}')" style="flex:1;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:700;color:#1d4ed8;cursor:pointer;">✏️ 編集</button>
         <button onclick="closeShijishoView()" style="background:#f8fafc;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;color:var(--sub);">×</button>
       </div>
