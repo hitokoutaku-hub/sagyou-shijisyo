@@ -61,8 +61,12 @@
         <select id="filterStatus" onchange="loadList()" style="flex:1;min-width:110px;padding:12px;font-size:15px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);">
           <option value="">全ステータス</option>
           <option>入庫待ち</option><option>作業中</option><option>引渡済</option>
-          <option value="未請求書">📄 請求書未済</option>
-          <option value="未3ヵ月点検">📘 3ヵ月点検未済</option>
+        </select>
+        <select id="filterExtra" onchange="loadList()" style="flex:1;min-width:110px;padding:12px;font-size:15px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);">
+          <option value="">絞り込み</option>
+          <option value="noInvoice">📄 請求書未済</option>
+          <option value="noRecord">📘 3ヵ月点検未済</option>
+          <option value="bookmark">⭐ ブックマーク</option>
         </select>
         <select id="filterType" onchange="loadList()" style="flex:1;min-width:110px;padding:12px;font-size:15px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);">
           <option value="">全種別</option>
