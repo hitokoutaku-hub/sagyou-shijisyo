@@ -1474,14 +1474,14 @@ function openShijishoView(order) {
       const done=total-uninvoiced;
       const pct=total?Math.round(done/total*100):0;
       const monthLabel=filterMonth?`${filterMonth.replace('-','年')}月`:'全期間';
-      return uninvoiced>0?`<div style="padding:10px 16px;background:#fff7ed;border-bottom:1px solid #fed7aa">
+      return uninvoiced>0?`<div id="invoiceBanner" style="padding:10px 16px;background:#fff7ed;border-bottom:1px solid #fed7aa">
         <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#92400e;margin-bottom:5px">
           <span>📄 ${monthLabel}の請求書未済 残り${uninvoiced}件</span><span>${done}/${total}件完了 ${pct}%</span>
         </div>
         <div style="background:#fed7aa;border-radius:99px;height:8px;overflow:hidden">
           <div style="background:#f97316;width:${pct}%;height:100%;border-radius:99px"></div>
         </div>
-      </div>`:'<div style="padding:8px 16px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;font-size:12px;font-weight:700;color:#15803d">✅ ${monthLabel}の請求書はすべて完了しています</div>';
+      </div>`:'<div id="invoiceBanner" style="padding:8px 16px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;font-size:12px;font-weight:700;color:#15803d">✅ ${monthLabel}の請求書はすべて完了しています</div>';
     })()}
     <div style="max-width:900px;margin:0 auto;padding:16px">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
@@ -1494,6 +1494,12 @@ function openShijishoView(order) {
         ${subNames ? shijishoField('👥 サブ担当',subNames) : ''}
       </div>
       ${sakugyoHtml}${photoHtml}
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
+        <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📄 請求書</div>
+        <button id="invoiceBtn_${order.id}" onclick="toggleInvoiceDoneDetail('${order.id}')" style="width:100%;padding:12px;border-radius:10px;border:2px solid ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#7e22ce':'#d1d5db'};background:${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#f3e8ff':'#f8fafc'};font-size:15px;font-weight:700;color:${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#7e22ce':'#6b7280'};cursor:pointer">
+          ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'✅ 請求書済':'📄 請求書未済（タップで済にする）'}
+        </button>
+      </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
         <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📷 写真を追加</div>
         <div style="margin-bottom:10px">
@@ -2164,6 +2170,47 @@ async function saveAddedPhotos(orderId) {
   } catch(e) { showToast('保存失敗: '+e.message,'error'); }
 }
 
+async function toggleInvoiceDoneDetail(id) {
+  const order = S.orders.find(o=>o.id===id); if(!order) return;
+  order.invoiceDone = !order.invoiceDone;
+  // progressからも同期
+  if(order.invoiceDone) {
+    if(!(order.progress||[]).includes('請求書済')) order.progress=[...(order.progress||[]),'請求書済'];
+  } else {
+    order.progress=(order.progress||[]).filter(p=>p!=='請求書済');
+  }
+  saveState(); await sbSaveOrder(order);
+  const done=order.invoiceDone||(order.progress||[]).includes('請求書済');
+  const btn=document.getElementById(`invoiceBtn_${id}`);
+  if(btn){
+    btn.style.borderColor=done?'#7e22ce':'#d1d5db';
+    btn.style.background=done?'#f3e8ff':'#f8fafc';
+    btn.style.color=done?'#7e22ce':'#6b7280';
+    btn.textContent=done?'✅ 請求書済':'📄 請求書未済（タップで済にする）';
+  }
+  // バナーを再描画
+  const filterMonth=document.getElementById('filterMonth')?.value||'';
+  const all=(S.orders||[]).filter(o=>filterMonth?(o.dateIn||o.savedAt||'').startsWith(filterMonth):true);
+  const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
+  const total=all.length; const doneCount=total-uninvoiced;
+  const pct=total?Math.round(doneCount/total*100):0;
+  const monthLabel=filterMonth?`${filterMonth.replace('-','年')}月`:'全期間';
+  const banner=document.getElementById('invoiceBanner');
+  if(banner){
+    banner.style.background=uninvoiced>0?'#fff7ed':'#f0fdf4';
+    banner.style.borderBottomColor=uninvoiced>0?'#fed7aa':'#bbf7d0';
+    banner.innerHTML=uninvoiced>0?`
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#92400e;margin-bottom:5px">
+        <span>📄 ${monthLabel}の請求書未済 残り${uninvoiced}件</span><span>${doneCount}/${total}件完了 ${pct}%</span>
+      </div>
+      <div style="background:#fed7aa;border-radius:99px;height:8px;overflow:hidden">
+        <div style="background:#f97316;width:${pct}%;height:100%;border-radius:99px"></div>
+      </div>`
+      :`<div style="font-size:12px;font-weight:700;color:#15803d">✅ ${monthLabel}の請求書はすべて完了しています</div>`;
+  }
+  showToast(done?'📄 請求書済にしました':'📄 請求書未に戻しました','success');
+  loadList();
+}
 async function toggleInvoiceDoneList(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
