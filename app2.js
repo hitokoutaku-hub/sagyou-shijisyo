@@ -1461,10 +1461,26 @@ function openShijishoView(order) {
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button onclick="toggleBookmark('${order.id}')" style="background:${order.bookmarked?'#f3e8ff':'#f8fafc'};border:1.5px solid ${order.bookmarked?'#7e22ce':'var(--border)'};border-radius:10px;padding:10px 14px;font-size:18px;cursor:pointer;">${order.bookmarked?'⭐':'☆'}</button>
+        <button onclick="if(confirm('この指示書を削除しますか？')){deleteOrder('${order.id}');closeShijishoView();loadList();}" style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 14px;font-size:18px;cursor:pointer;">🗑️</button>
         <button onclick="openEditModal('${order.id}')" style="flex:1;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:700;color:#1d4ed8;cursor:pointer;">✏️ 編集</button>
         <button onclick="closeShijishoView()" style="background:#f8fafc;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;color:var(--sub);">×</button>
       </div>
     </div>
+    ${(()=>{
+      const all=S.orders||[];
+      const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
+      const total=all.length;
+      const done=total-uninvoiced;
+      const pct=total?Math.round(done/total*100):0;
+      return uninvoiced>0?`<div style="padding:10px 16px;background:#fff7ed;border-bottom:1px solid #fed7aa">
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#92400e;margin-bottom:5px">
+          <span>📄 請求書未済 残り${uninvoiced}件</span><span>${done}/${total}件完了 ${pct}%</span>
+        </div>
+        <div style="background:#fed7aa;border-radius:99px;height:8px;overflow:hidden">
+          <div style="background:#f97316;width:${pct}%;height:100%;border-radius:99px"></div>
+        </div>
+      </div>`:'';
+    })()}
     <div style="max-width:900px;margin:0 auto;padding:16px">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
         ${shijishoField('👤 顧客名',order.custName)}
