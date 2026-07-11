@@ -1467,19 +1467,21 @@ function openShijishoView(order) {
       </div>
     </div>
     ${(()=>{
-      const all=S.orders||[];
+      const filterMonth=document.getElementById('filterMonth')?.value||'';
+      const all=(S.orders||[]).filter(o=>filterMonth?(o.dateIn||o.savedAt||'').startsWith(filterMonth):true);
       const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
       const total=all.length;
       const done=total-uninvoiced;
       const pct=total?Math.round(done/total*100):0;
+      const monthLabel=filterMonth?`${filterMonth.replace('-','年')}月`:'全期間';
       return uninvoiced>0?`<div style="padding:10px 16px;background:#fff7ed;border-bottom:1px solid #fed7aa">
         <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#92400e;margin-bottom:5px">
-          <span>📄 請求書未済 残り${uninvoiced}件</span><span>${done}/${total}件完了 ${pct}%</span>
+          <span>📄 ${monthLabel}の請求書未済 残り${uninvoiced}件</span><span>${done}/${total}件完了 ${pct}%</span>
         </div>
         <div style="background:#fed7aa;border-radius:99px;height:8px;overflow:hidden">
           <div style="background:#f97316;width:${pct}%;height:100%;border-radius:99px"></div>
         </div>
-      </div>`:'';
+      </div>`:'<div style="padding:8px 16px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;font-size:12px;font-weight:700;color:#15803d">✅ ${monthLabel}の請求書はすべて完了しています</div>';
     })()}
     <div style="max-width:900px;margin:0 auto;padding:16px">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
