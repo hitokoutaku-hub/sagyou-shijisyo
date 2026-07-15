@@ -502,9 +502,7 @@ function setPreventOkNg(label, val) {
 // ─── 修理タイプ切り替え ───────────────────────────────────────
 let repairType = 'car';
 
-const DEF_FREEZER_REPAIR = ['コンプレッサー交換','エアコンホース交換','ブロアモーター交換','コンデンサーモーター交換','エアコンガス補充','レシーバー交換','コンデンサー交換','コンデンサー清掃','ガス漏れ点検'];
 let freezerWorkshop = '';
-let freezerCheckState = {};
 
 function setFreezerWorkshop(w) { freezerWorkshop = freezerWorkshop===w?'':w; renderFreezerItems(); }
 function renderFreezerItems() {
@@ -520,22 +518,26 @@ function renderFreezerItems() {
       we.appendChild(btn);
     });
   }
-  const c = document.getElementById('repair-freezer-check');
-  if (!c) return;
-  c.innerHTML = '';
-  DEF_FREEZER_REPAIR.forEach(function(label) {
-    const checked = freezerCheckState[label] || false;
-    const d = document.createElement('div');
-    d.className = 'check-item' + (checked?' checked':'');
-    d.innerHTML = '<span>'+(checked?'✅':'⬜')+'</span><span>'+label+'</span>';
-    d.onclick = function() { freezerCheckState[label] = !freezerCheckState[label]; renderFreezerItems(); };
-    c.appendChild(d);
+}
+
+// ─── 3ヶ月点検（トラック専用） ─────────────────────────────────
+const DEF_3MONTH_TRUCK_REPAIR = [
+  'エンジンオイルエレメント交換','エンジンオイル交換',
+  '燃料エレメント交換【メイン】','燃料エレメント交換【サブ】',
+  'ブローバイエレメント交換','ベルト調整','バッテリー点検',
+];
+let threeMonthCheckState = {};
+
+function renderThreeMonthItems() {
+  _renderCheckGrid('repair-3month-items', DEF_3MONTH_TRUCK_REPAIR, threeMonthCheckState, label => {
+    threeMonthCheckState[label] = !threeMonthCheckState[label];
+    renderThreeMonthItems();
   });
 }
 
 function switchRepairType(type) {
   repairType = type;
-  ['car','truck','aircon','freezer'].forEach(t => {
+  ['car','truck','aircon','freezer','3month'].forEach(t => {
     document.getElementById('repair-'+t+'-items').style.display = t===type ? '' : 'none';
     document.getElementById('r-tab-'+t).className = 'btn btn-sm ' + (t===type?'btn-primary':'btn-gray');
   });
@@ -543,6 +545,26 @@ function switchRepairType(type) {
   if (type==='truck')   renderTruckItems();
   if (type==='aircon')  renderAirconItems();
   if (type==='freezer') renderFreezerItems();
+  if (type==='3month')  renderThreeMonthItems();
+}
+
+// ─── 「種類を選んでください」からのショートカット入場 ───────────
+function openRepairItemsSection() {
+  const body = document.getElementById('repair-items-body');
+  if (!body) return;
+  if (body.style.display === 'none') {
+    const title = body.previousElementSibling;
+    if (title) toggleSection('repair-items-body', title);
+  } else {
+    body.style.display = 'block';
+  }
+}
+
+function quickEnter(subtype) {
+  closeNewOrderModal();
+  switchTab('repair');
+  openRepairItemsSection();
+  switchRepairType(subtype);
 }
 
 function _renderCheckGrid(cid, items, stateObj, onToggle) {
@@ -915,8 +937,15 @@ async function saveRepair() {
   const preventResults = {};
   DEF_PREVENT_OKNG.forEach(label => { if (S.preventOkNg?.[label]) preventResults[label]=S.preventOkNg[label]; });
   const carItems    = Object.entries(S.carRepairCheckState||{}).filter(([,v])=>v).map(([k])=>k);
-  const truckItems  = Object.entries(S.truckCheckState||{}).filter(([,v])=>v).map(([k])=>k);
+  let truckItems  = Object.entries(S.truckCheckState||{}).filter(([,v])=>v).map(([k])=>k);
   const airconItems = Object.entries(S.airconCheckState||{}).filter(([,v])=>v).map(([k])=>k);
+  if (repairType==='3month') {
+    truckItems = Object.entries(threeMonthCheckState||{}).filter(([,v])=>v).map(([k])=>k);
+  }
+  let remarksVal = document.getElementById('r-remarks').value;
+  if (repairType==='freezer' && freezerWorkshop) {
+    remarksVal = `【業者：${freezerWorkshop}】\n` + remarksVal;
+  }
   const orderNum    = genOrderNum();
   const order = {
     id: Date.now().toString(), orderNum, type:'repair', repairType,
@@ -933,7 +962,7 @@ async function saveRepair() {
     mechId:    getMechId('mechSelectRepair'),
     subStaff:  [...currentSubStaff],
     receptionName: '',
-    remarks:   document.getElementById('r-remarks').value,
+    remarks:   remarksVal,
     carItems, truckItems, airconItems,
     noticeItems: Object.entries(S.checkState.notice||{}).filter(([,v])=>v).map(([k])=>k),
     preventResults,
@@ -967,7 +996,7 @@ function clearRepair() {
   const partsPending=document.getElementById('r-partsPending'); if(partsPending) partsPending.checked=false;
   document.getElementById('r-status').value = '入庫中';
   document.getElementById('r-dateIn').value = new Date().toISOString().split('T')[0];
-  S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; freezerCheckState={}; freezerWorkshop='';
+  S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; threeMonthCheckState={}; freezerWorkshop='';
   currentSubStaff=[];
   const pc=document.getElementById('r-photos'); if(pc) pc.innerHTML='';
   window._pendingPhotos={};
@@ -1148,7 +1177,7 @@ async function loadList(forceLoadAll) {
   if(filterExtra==='bookmark') orders=orders.filter(o=>o.bookmarked);
   if(filterExtra==='noInvoice') orders=orders.filter(o=>!o.invoiceDone && !(o.progress||[]).includes('請求書済'));
   if(filterExtra==='noRecord') orders=orders.filter(o=>{
-    const is3m = [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
+    const is3m = o.repairType==='3month' || [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
     return is3m && !o.recordDone;
   });
   if(filterKeyword) orders=orders.filter(o=>
