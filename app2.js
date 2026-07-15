@@ -297,40 +297,52 @@ function downloadSelectedPhotos() {
   });
 }
 
-// ─── 自動採番 ────────────────────────────────────────────────
-function genOrderNum() {
+// ─── 自動採番（データベース基準） ─────────────────────────────
+async function fetchNextOrderNum() {
   const year = new Date().getFullYear();
-  S.counter = S.counter || {};
-  // 年が変わったらリセット
-  if (S.counter._year !== year) {
-    S.counter = { _year: year, _seq: 0 };
+  let maxN = 0;
+  if (sb) {
+    try {
+      const { data, error } = await sb
+        .from(DB_TABLES.KIROKU)
+        .select('order_num,created_at')
+        .gte('created_at', `${year}-01-01`)
+        .lt('created_at', `${year+1}-01-01`);
+      if (error) throw error;
+      (data||[]).forEach(r => {
+        if (r.order_num && /^\d+$/.test(r.order_num)) {
+          const n = parseInt(r.order_num, 10);
+          if (n > maxN) maxN = n;
+        }
+      });
+    } catch(e) { console.log('番号取得エラー:', e); }
   }
-  S.counter._seq = (S.counter._seq || 0) + 1;
-  saveState();
-  return String(S.counter._seq).padStart(4, '0');
+  // クラウドにまだ同期できていないローカル保存分も念のため考慮
+  (S.orders||[]).forEach(o => {
+    if (o.orderNum && /^\d+$/.test(o.orderNum) && String(new Date(o.dateIn||o.savedAt||'').getFullYear())===String(year)) {
+      const n = parseInt(o.orderNum, 10);
+      if (n > maxN) maxN = n;
+    }
+  });
+  return maxN + 1;
 }
 
-function peekOrderNum() {
-  const year = new Date().getFullYear();
-  S.counter = S.counter || {};
-  if (S.counter._year !== year) return '0001';
-  return String((S.counter._seq || 0) + 1).padStart(4, '0');
+async function genOrderNum() {
+  const next = await fetchNextOrderNum();
+  return String(next).padStart(4, '0');
+}
+
+async function peekOrderNum() {
+  const next = await fetchNextOrderNum();
+  return String(next).padStart(4, '0');
 }
 
 function resetCounter() {
-  if (!confirm('今日の連番をリセットしますか？')) return;
-  const today = new Date();
-  const ymd = today.getFullYear().toString()
-    + String(today.getMonth()+1).padStart(2,'0')
-    + String(today.getDate()).padStart(2,'0');
-  if (S.counter) S.counter[ymd] = 0;
-  saveState();
-  updateNumDisplay();
-  showToast('連番をリセットしました', 'info');
+  showToast('番号は共有データベースから自動計算されるため、リセットは不要です', 'info');
 }
 
-function updateNumDisplay() {
-  const n = peekOrderNum();
+async function updateNumDisplay() {
+  const n = await peekOrderNum();
   ['repairOrderNum','skOrderNum','accOrderNum'].forEach(id => {
     const el = document.getElementById(id); if (el) el.textContent = n;
   });
@@ -946,7 +958,7 @@ async function saveRepair() {
   if (repairType==='freezer' && freezerWorkshop) {
     remarksVal = `【業者：${freezerWorkshop}】\n` + remarksVal;
   }
-  const orderNum    = genOrderNum();
+  const orderNum    = await genOrderNum();
   const order = {
     id: Date.now().toString(), orderNum, type:'repair', repairType,
     status:    document.getElementById('r-status').value,
@@ -1014,7 +1026,7 @@ async function saveAccident() {
   if (!custName && !carName) { showToast('顧客名か車名を入力してください', 'error'); return; }
   setSaving('btnSaveAccident', true);
   const insurance = document.getElementById('ac-insurance').value || document.getElementById('ac-insuranceDirect').value.trim();
-  const orderNum  = genOrderNum();
+  const orderNum  = await genOrderNum();
   const order = {
     id: Date.now().toString(), orderNum, type:'accident',
     status:   document.getElementById('ac-status').value,
@@ -1061,7 +1073,7 @@ async function saveShakken() {
   } else {
     (S.skItems||[]).forEach(item => { skResults[item.label]=S.skCheckState[item.label]?.work||''; });
   }
-  const orderNum = genOrderNum();
+  const orderNum = await genOrderNum();
   const order = {
     id: Date.now().toString(), orderNum, type:'shakken', repairType:skType,
     status:   document.getElementById('sk-status').value,
@@ -2336,7 +2348,7 @@ async function renderOwnerPanel() {
 
   panel.innerHTML = '<div class="loading"><span class="spinner"></span> 集計中...</div>';
 
-  if (sbReady) { const sbOrders=await sbLoadOrders(); if(sbOrders!==null) S.orders=sbOrders; }
+  if (sbReady) { const sbOrders=await sbLoadOrders(true); if(sbOrders!==null) S.orders=sbOrders; }
 
   const now    = new Date();
   const thisYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
