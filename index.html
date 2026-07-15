@@ -35,11 +35,14 @@
 
   <!-- 新規登録モーダル -->
   <div class="modal-bg" id="newOrderModal">
-    <div class="modal" style="max-width:360px;">
+    <div class="modal" style="max-width:360px;max-height:85vh;overflow-y:auto;">
       <div class="modal-title">📝 種類を選んでください</div>
       <button onclick="closeNewOrderModal();switchTab('repair')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:10px;background:#fff7ed;border:2px solid #fed7aa;border-radius:12px;font-size:18px;font-weight:700;color:#c2410c;cursor:pointer;text-align:left;">🔧 一般修理</button>
       <button onclick="closeNewOrderModal();switchTab('shakken')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:10px;background:#eff6ff;border:2px solid #bfdbfe;border-radius:12px;font-size:18px;font-weight:700;color:#1d4ed8;cursor:pointer;text-align:left;">🔍 車検</button>
-      <button onclick="closeNewOrderModal();switchTab('accident')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:16px;background:#fef2f2;border:2px solid #fecaca;border-radius:12px;font-size:18px;font-weight:700;color:#991b1b;cursor:pointer;text-align:left;">🚨 事故修理</button>
+      <button onclick="closeNewOrderModal();switchTab('accident')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:10px;background:#fef2f2;border:2px solid #fecaca;border-radius:12px;font-size:18px;font-weight:700;color:#991b1b;cursor:pointer;text-align:left;">🚨 事故修理</button>
+      <button onclick="quickEnter('3month')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:10px;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:12px;font-size:18px;font-weight:700;color:#15803d;cursor:pointer;text-align:left;">📅 3か月点検</button>
+      <button onclick="quickEnter('aircon')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:10px;background:#f0f9ff;border:2px solid #bae6fd;border-radius:12px;font-size:18px;font-weight:700;color:#0369a1;cursor:pointer;text-align:left;">❄️ クーラー修理</button>
+      <button onclick="quickEnter('freezer')" style="display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;margin-bottom:16px;background:#f8fafc;border:2px solid #e2e8f0;border-radius:12px;font-size:18px;font-weight:700;color:#334155;cursor:pointer;text-align:left;">🧊 冷凍機修理</button>
       <button onclick="closeNewOrderModal()" style="width:100%;padding:16px;background:var(--card2);border:1.5px solid var(--border);border-radius:12px;font-size:17px;font-weight:600;color:var(--sub);cursor:pointer;">キャンセル</button>
     </div>
   </div>
@@ -167,19 +170,21 @@
     <div class="card" style="padding:0;overflow:hidden;">
       <div class="card-title" onclick="toggleSection('repair-items-body',this)" style="cursor:pointer;padding:14px;margin:0;border-radius:var(--radius) var(--radius) 0 0;user-select:none;">✅ 依頼事項 <span style="float:right;font-size:14px;color:var(--sub);">▼</span></div>
       <div id="repair-items-body" style="display:none;padding:14px;border-top:1px solid var(--border);">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
           <button id="r-tab-car"     class="btn btn-primary btn-sm" onclick="switchRepairType('car')">🚗 乗用車</button>
           <button id="r-tab-truck"   class="btn btn-gray btn-sm"    onclick="switchRepairType('truck')">🚛 トラック</button>
           <button id="r-tab-aircon"  class="btn btn-gray btn-sm"    onclick="switchRepairType('aircon')">❄️ エアコン</button>
           <button id="r-tab-freezer" class="btn btn-gray btn-sm"    onclick="switchRepairType('freezer')">🧊 冷凍機</button>
+          <button id="r-tab-3month"  class="btn btn-gray btn-sm"    onclick="switchRepairType('3month')">📅 3ヶ月点検</button>
         </div>
         <div id="repair-car-items"    class="check-grid"></div>
         <div id="repair-truck-items"  class="check-grid" style="display:none"></div>
         <div id="repair-aircon-items" class="check-grid" style="display:none"></div>
+        <div id="repair-3month-items" class="check-grid" style="display:none"></div>
         <div id="repair-freezer-items" style="display:none">
-          <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">🏭 修理工場</div>
-          <div id="repair-freezer-workshop" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
-          <div class="check-grid" id="repair-freezer-check"></div>
+          <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:8px">🏭 修理工場（任意）</div>
+          <div id="repair-freezer-workshop" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px"></div>
+          <div style="font-size:12px;color:var(--sub);">※ 冷凍機修理は外注が多いため、詳細は下の「備考・メモ」欄にご記入ください</div>
         </div>
       </div>
     </div>
