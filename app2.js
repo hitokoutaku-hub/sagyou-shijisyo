@@ -1153,6 +1153,18 @@ function clearFilter() {
   loadList(true);
 }
 
+async function manualRefresh() {
+  const btn = document.getElementById('refreshBtn');
+  if (btn) {
+    btn.style.transition = 'transform .6s';
+    btn.style.transform = 'rotate(360deg)';
+    setTimeout(() => { btn.style.transform = 'rotate(0deg)'; }, 600);
+  }
+  showToast('最新データを取得中...', 'info');
+  _allMonthsLoaded = false;
+  await loadList(true);
+  showToast('更新しました ✅', 'success');
+}
 async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
