@@ -111,31 +111,63 @@ function setSaving(btnId, saving) {
 }
 
 // ─── Supabase CRUD ────────────────────────────────────────────
-async function sbSaveOrder(order) {
-  if (!sb) return false;
+async function sbSaveOrderOnce(order) {
+  const { error } = await sb.from(DB_TABLES.KIROKU).upsert({
+    id: order.id, order_num: order.orderNum, order_type: order.type,
+    status: order.status, cust_name: order.custName, car_name: order.carName,
+    car_plate: order.carPlate, date_in: order.dateIn || null, date_out: order.dateOut || null,
+    mech_name: order.mechName, mech_id: order.mechId,
+    sub_staff: order.subStaff || [],
+    reception_name: order.receptionName, remarks: order.remarks,
+    insurance: order.insurance, repair_type: order.repairType,
+    car_items: order.carItems, truck_items: order.truckItems, aircon_items: order.airconItems,
+    notice_items: order.noticeItems, work_items: order.workItems,
+    prevent_results: order.preventResults, sk_results: order.skResults,
+    sk_truck_check: order.skTruckCheckState, sk_truck_notice: order.skTruckNotice,
+    sk_truck_prevent: order.skTruckPrevent, sk_truck_lights: order.skTruckLights,
+    saved_at: order.savedAt,
+    nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
+    nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
+    planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false, record_done: order.recordDone||false, bookmarked: order.bookmarked||false, progress: order.progress||[],
+  });
+  if (error) throw error;
+}
+function getPendingOrders() {
+  try { return JSON.parse(localStorage.getItem('ws3_pending_orders') || '[]'); } catch(e) { return []; }
+}
+function setPendingOrders(list) {
+  localStorage.setItem('ws3_pending_orders', JSON.stringify(list));
+}
+function queuePendingOrder(order) {
+  const list = getPendingOrders().filter(o => o.id !== order.id);
+  list.push(order);
+  setPendingOrders(list);
+}
+function removePendingOrder(id) {
+  setPendingOrders(getPendingOrders().filter(o => o.id !== id));
+}
+async function flushPendingOrders() {
+  const list = getPendingOrders();
+  if (!list.length || !sb) return;
+  for (const order of list) {
+    try { await sbSaveOrderOnce(order); removePendingOrder(order.id); }
+    catch(e) { console.log('保留中の指示書、再送信も失敗:', order.orderNum, e); }
+  }
+}
+async function sbSaveOrder(order, _attempt) {
+  if (!sb) { queuePendingOrder(order); return false; }
+  _attempt = _attempt || 1;
   try {
-    const { error } = await sb.from(DB_TABLES.KIROKU).upsert({
-      id: order.id, order_num: order.orderNum, order_type: order.type,
-      status: order.status, cust_name: order.custName, car_name: order.carName,
-      car_plate: order.carPlate, date_in: order.dateIn || null, date_out: order.dateOut || null,
-      mech_name: order.mechName, mech_id: order.mechId,
-      sub_staff: order.subStaff || [],
-      reception_name: order.receptionName, remarks: order.remarks,
-      insurance: order.insurance, repair_type: order.repairType,
-      car_items: order.carItems, truck_items: order.truckItems, aircon_items: order.airconItems,
-      notice_items: order.noticeItems, work_items: order.workItems,
-      prevent_results: order.preventResults, sk_results: order.skResults,
-      sk_truck_check: order.skTruckCheckState, sk_truck_notice: order.skTruckNotice,
-      sk_truck_prevent: order.skTruckPrevent, sk_truck_lights: order.skTruckLights,
-      saved_at: order.savedAt,
-      nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
-      nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
-      planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false, record_done: order.recordDone||false, bookmarked: order.bookmarked||false, progress: order.progress||[],
-    });
-    if (error) throw error;
+    await sbSaveOrderOnce(order);
+    removePendingOrder(order.id);
     return true;
   } catch(e) {
     console.log('Supabase保存エラー:', e);
+    if (_attempt < 3) {
+      await new Promise(res => setTimeout(res, 1000 * _attempt));
+      return sbSaveOrder(order, _attempt + 1);
+    }
+    queuePendingOrder(order);
     return false;
   }
 }
@@ -990,7 +1022,7 @@ async function saveRepair() {
     if (ok) {
       showToast(`✅ 保存しました（${orderNum}）`, 'success');
     } else {
-      showToast(`⚠️ ローカルに保存しました（クラウド同期失敗）`, 'error', 5000);
+      showToast(`⚠️ クラウド同期に失敗しました。自動で再送信します（次回起動時にも再試行）`, 'error', 5000);
     }
     clearRepair();
   } catch(e) {
@@ -1042,7 +1074,7 @@ async function saveAccident() {
   try {
     S.orders.unshift(order); saveState();
     const ok = await sbSaveOrder(order);
-    showToast(ok ? `✅ 保存しました（${orderNum}）` : '⚠️ ローカルに保存しました', ok?'success':'error');
+    showToast(ok ? `✅ 保存しました（${orderNum}）` : '⚠️ クラウド同期失敗。自動で再送信します', ok?'success':'error');
     clearAccident();
   } catch(e) { showToast('保存に失敗しました','error'); }
   finally { setSaving('btnSaveAccident', false); }
@@ -1093,7 +1125,7 @@ async function saveShakken() {
   try {
     S.orders.unshift(order); saveState();
     const ok = await sbSaveOrder(order);
-    showToast(ok ? `✅ 保存しました（${orderNum}）` : '⚠️ ローカルに保存しました', ok?'success':'error');
+    showToast(ok ? `✅ 保存しました（${orderNum}）` : '⚠️ クラウド同期失敗。自動で再送信します', ok?'success':'error');
     clearShakken();
   } catch(e) { showToast('保存に失敗しました','error'); }
   finally { setSaving('btnSaveShakken', false); }
@@ -1168,6 +1200,7 @@ async function manualRefresh() {
 async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
+  await flushPendingOrders();
   const filterMonth0  =document.getElementById('filterMonth')?.value;
   const filterKeyword0=document.getElementById('filterKeyword')?.value.trim();
   if (sbReady && !_allMonthsLoaded) {
@@ -1187,6 +1220,12 @@ async function loadList(forceLoadAll) {
   } else if (sbReady && _allMonthsLoaded) {
     const sbOrders = await sbLoadOrders(true);
     if (sbOrders !== null) S.orders = sbOrders;
+  }
+  // まだクラウド送信できていない指示書は、一覧から消えないようここで合流させる
+  const stillPending = getPendingOrders();
+  if (stillPending.length) {
+    const existingIds = new Set(S.orders.map(o => o.id));
+    stillPending.forEach(o => { if (!existingIds.has(o.id)) S.orders.unshift(o); });
   }
   const filterMonth  =document.getElementById('filterMonth')?.value;
   const filterStatus =document.getElementById('filterStatus')?.value;
@@ -2178,7 +2217,7 @@ async function saveEdit() {
   order.savedAt = new Date().toLocaleString('ja-JP');
   saveState();
   const ok = await sbSaveOrder(order);
-  showToast(ok ? '✅ 保存しました' : '⚠️ ローカルに保存しました', ok?'success':'error');
+  showToast(ok ? '✅ 保存しました' : '⚠️ クラウド同期失敗。自動で再送信します', ok?'success':'error');
   closeEditModal();
   closeShijishoView();
   openShijishoView(order);
