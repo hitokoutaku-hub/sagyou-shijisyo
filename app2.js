@@ -111,6 +111,43 @@ function setSaving(btnId, saving) {
 }
 
 // ─── Supabase CRUD ────────────────────────────────────────────
+// ─── 汎用の耐障害性のある書き込み（注文以外の全テーブル用） ──────────────────
+function getPendingWrites() {
+  try { return JSON.parse(localStorage.getItem('ws3_pending_writes') || '[]'); } catch(e) { return []; }
+}
+function setPendingWrites(list) { localStorage.setItem('ws3_pending_writes', JSON.stringify(list)); }
+function queuePendingWrite(item) { const list = getPendingWrites(); list.push(item); setPendingWrites(list); }
+async function sbWriteOnce(table, op, payload, matchId) {
+  if (op === 'insert') { const { error } = await sb.from(table).insert(payload); if (error) throw error; }
+  else if (op === 'update') { const { error } = await sb.from(table).update(payload).eq('id', matchId); if (error) throw error; }
+  else if (op === 'delete') { const { error } = await sb.from(table).delete().eq('id', matchId); if (error) throw error; }
+}
+async function sbWrite(table, op, payload, matchId, _attempt) {
+  if (!sb) { queuePendingWrite({ table, op, payload, matchId }); return false; }
+  _attempt = _attempt || 1;
+  try { await sbWriteOnce(table, op, payload, matchId); return true; }
+  catch(e) {
+    console.log('Supabase書き込みエラー:', table, op, e);
+    if (_attempt < 3) {
+      await new Promise(res => setTimeout(res, 1000 * _attempt));
+      return sbWrite(table, op, payload, matchId, _attempt + 1);
+    }
+    queuePendingWrite({ table, op, payload, matchId });
+    return false;
+  }
+}
+async function flushPendingWrites() {
+  const list = getPendingWrites();
+  if (!list.length || !sb) return;
+  const remaining = [];
+  for (const item of list) {
+    try { await sbWriteOnce(item.table, item.op, item.payload, item.matchId); }
+    catch(e) { remaining.push(item); }
+  }
+  setPendingWrites(remaining);
+  if (remaining.length === 0 && list.length > 0) showToast(`✅ 保留中だった${list.length}件を送信しました`, 'success');
+}
+
 async function sbSaveOrderOnce(order) {
   const { error } = await sb.from(DB_TABLES.KIROKU).upsert({
     id: order.id, order_num: order.orderNum, order_type: order.type,
@@ -215,12 +252,9 @@ async function sbLoadOrders(loadAll, monthFilter) {
 }
 
 async function sbDeleteOrder(id) {
-  if (!sb) return false;
-  try {
-    const { error } = await sb.from(DB_TABLES.KIROKU).delete().eq('id', id);
-    if (error) throw error;
-    return true;
-  } catch(e) { return false; }
+  if (!sb) { queuePendingWrite({ table: DB_TABLES.KIROKU, op: 'delete', payload: null, matchId: id }); return false; }
+  const ok = await sbWrite(DB_TABLES.KIROKU, 'delete', null, id);
+  return ok;
 }
 
 // ─── 写真管理 ────────────────────────────────────────────────
@@ -292,11 +326,9 @@ async function uploadPendingPhotos(orderId) {
   const pending = window._pendingPhotos || {};
   const keys    = Object.keys(pending);
   if (!keys.length || !sb) return;
-  try {
-    await sb.from(DB_TABLES.PHOTOS).insert(
-      keys.map(k => ({ kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' }))
-    );
-  } catch(e) { console.log('写真保存エラー:', e); }
+  const rows = keys.map(k => ({ kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' }));
+  const ok = await sbWrite(DB_TABLES.PHOTOS, 'insert', rows, null);
+  if (!ok) showToast('⚠️ 写真の保存に失敗。自動で再送信します', 'error');
   window._pendingPhotos = {};
 }
 
@@ -313,9 +345,7 @@ function previewPhoto(inputId, previewId) {
 async function deletePhoto(photoId, slotId) {
   if (!confirm('この写真を削除しますか？')) return;
   document.getElementById(slotId)?.remove();
-  if (sb && photoId) {
-    try { await sb.from(DB_TABLES.PHOTOS).delete().eq('id', photoId); } catch(e) {}
-  }
+  if (sb && photoId) { await sbWrite(DB_TABLES.PHOTOS, 'delete', null, photoId); }
 }
 
 function selectAllPhotos(val) { document.querySelectorAll('[id^="photo-check-"]').forEach(cb => cb.checked = val); }
@@ -764,23 +794,18 @@ async function addCustomer() {
   const rows = [];
   if (cust) rows.push({ category:'customer', name:cust });
   if (car)  rows.push({ category:'car',      name:car  });
-  try {
-    const { error } = await sb.from(DB_TABLES.MASTERS).insert(rows);
-    if (error) throw error;
-    document.getElementById('newCustName').value = '';
-    document.getElementById('newCarName').value  = '';
-    await loadMasters();
-    showToast('登録しました', 'success');
-  } catch(e) { showToast('登録失敗: ' + e.message, 'error'); }
+  const ok = await sbWrite(DB_TABLES.MASTERS, 'insert', rows, null);
+  document.getElementById('newCustName').value = '';
+  document.getElementById('newCarName').value  = '';
+  await loadMasters();
+  showToast(ok ? '登録しました' : '⚠️ 通信失敗。自動で再送信します', ok ? 'success' : 'error');
 }
 
 async function removeMaster(id) {
   if (!sb) return;
-  try {
-    await sb.from(DB_TABLES.MASTERS).delete().eq('id', id);
-    await loadMasters();
-    showToast('削除しました', 'info');
-  } catch(e) { showToast('削除失敗', 'error'); }
+  const ok = await sbWrite(DB_TABLES.MASTERS, 'delete', null, id);
+  await loadMasters();
+  showToast(ok ? '削除しました' : '⚠️ 通信失敗。自動で再送信します', ok ? 'info' : 'error');
 }
 
 // ─── スタッフ管理 ─────────────────────────────────────────────
@@ -813,25 +838,20 @@ async function addStaff() {
     showToast('名前と4桁の数字PINを入力してください', 'error'); return;
   }
   if (!sb) return;
-  try {
-    const id = 'staff_' + Date.now();
-    const { error } = await sb.from(DB_TABLES.STAFF).insert([{ id, name, pin, is_owner: false }]);
-    if (error) throw error;
-    document.getElementById('newStaffName').value = '';
-    document.getElementById('newStaffPin').value  = '';
-    await loadStaffForSettings();
-    showToast(`${name} を追加しました`, 'success');
-  } catch(e) { showToast('登録失敗: ' + e.message, 'error'); }
+  const id = 'staff_' + Date.now();
+  const ok = await sbWrite(DB_TABLES.STAFF, 'insert', [{ id, name, pin, is_owner: false }], null);
+  document.getElementById('newStaffName').value = '';
+  document.getElementById('newStaffPin').value  = '';
+  await loadStaffForSettings();
+  showToast(ok ? `${name} を追加しました` : '⚠️ 通信失敗。自動で再送信します', ok ? 'success' : 'error');
 }
 
 async function removeStaff(id) {
   if (!confirm('このスタッフを削除しますか？')) return;
   if (!sb) return;
-  try {
-    await sb.from(DB_TABLES.STAFF).delete().eq('id', id);
-    await loadStaffForSettings();
-    showToast('削除しました', 'info');
-  } catch(e) { showToast('削除失敗', 'error'); }
+  const ok = await sbWrite(DB_TABLES.STAFF, 'delete', null, id);
+  await loadStaffForSettings();
+  showToast(ok ? '削除しました' : '⚠️ 通信失敗。自動で再送信します', ok ? 'info' : 'error');
 }
 
 // ─── 保険会社 ────────────────────────────────────────────────
@@ -1201,6 +1221,7 @@ async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
   await flushPendingOrders();
+  await flushPendingWrites();
   const filterMonth0  =document.getElementById('filterMonth')?.value;
   const filterKeyword0=document.getElementById('filterKeyword')?.value.trim();
   if (sbReady && !_allMonthsLoaded) {
@@ -1396,10 +1417,11 @@ async function quickStatus(orderId, newStatus) {
   });
   order.status = newStatus;
   saveState();
+  let statusOk = true;
   if (sb) {
-    try { await sb.from(DB_TABLES.KIROKU).update({ status: newStatus }).eq('id', orderId); } catch(e) {}
+    statusOk = await sbWrite(DB_TABLES.KIROKU, 'update', { status: newStatus }, orderId);
   }
-  showToast(`✅ ステータスを「${newStatus}」に変更しました`, 'success');
+  showToast(statusOk ? `✅ ステータスを「${newStatus}」に変更しました` : `⚠️ 通信失敗。自動で再送信します（表示は「${newStatus}」のまま）`, statusOk ? 'success' : 'error');
   // ステータスボタンの見た目だけ即時更新（全件再読み込みしない）
   const statuses = [['入庫待ち','#f97316'],['作業中','#ef4444'],['引渡済','#64748b']];
   document.querySelectorAll(`button[onclick*="quickStatus('${orderId}'"]`).forEach(btn => {
@@ -1632,15 +1654,11 @@ function addPhotoToOrder(orderId,containerId,type) {
         div.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px">${type}</div><img src="${compressed}" style="width:100%;border-radius:6px"><div style="color:var(--sub);font-size:10px;margin-top:3px;text-align:center">保存中...</div>`;
         if(container) container.appendChild(div);
         if(sb){
-          try{
-            const{error}=await sb.from(DB_TABLES.PHOTOS).insert([{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}]);
-            const s=div.querySelector('div:last-child');
-            if(!error){ if(s){s.textContent='✅ 保存完了'; s.style.color='var(--ok)'; s.style.fontWeight='700';} }
-            else { if(s){s.textContent='❌ 保存失敗'; s.style.color='var(--danger)'; s.style.fontWeight='700';} }
-          } catch(e) {
-            const s=div.querySelector('div:last-child');
-            if(s){s.textContent='❌ 保存失敗'; s.style.color='var(--danger)'; s.style.fontWeight='700';}
-          }
+          const rows=[{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}];
+          const ok=await sbWrite(DB_TABLES.PHOTOS,'insert',rows,null);
+          const s=div.querySelector('div:last-child');
+          if(ok){ if(s){s.textContent='✅ 保存完了'; s.style.color='var(--ok)'; s.style.fontWeight='700';} }
+          else { if(s){s.textContent='⚠️ 保留中（自動で再送信します）'; s.style.color='var(--danger)'; s.style.fontWeight='700';} }
         }
         doneCount++;
         if (doneCount === fileCount) {
@@ -1731,12 +1749,13 @@ async function saveFsPhoto() {
   ctx.drawImage(img, -sw/2, -sh/2);
   const newSrc = canvas.toDataURL('image/jpeg', 0.85);
   if (sb && _fsPhotoId) {
-    try {
-      const { error } = await sb.from(DB_TABLES.PHOTOS).update({ photo_b64: newSrc }).eq('id', _fsPhotoId);
-      if (error) throw error;
+    const ok = await sbWrite(DB_TABLES.PHOTOS, 'update', { photo_b64: newSrc }, _fsPhotoId);
+    if (ok) {
       showToast('✅ 保存しました', 'success');
       document.querySelectorAll('img').forEach(el => { if (el.src === img.src) el.src = newSrc; });
-    } catch(e) { showToast('保存失敗: ' + e.message, 'error'); }
+    } else {
+      showToast('⚠️ 通信失敗。自動で再送信します', 'error');
+    }
   }
   closePhotoFullscreen();
 }
@@ -2251,15 +2270,19 @@ function closeAddPhotoModal() { document.getElementById('addPhotoModal')?.remove
 async function saveAddedPhotos(orderId) {
   const pending=window._pendingPhotos||{}; const keys=Object.keys(pending);
   if(!keys.length) { showToast('写真を選択してください','error'); return; }
-  try {
-    const{error}=await sb.from(DB_TABLES.PHOTOS).insert(keys.map(k=>({kiroku_id:orderId,photo_type:pending[k].type||'写真',photo_b64:pending[k].dataUrl,memo:''})));
-    if(error) throw error;
+  const rows = keys.map(k=>({kiroku_id:orderId,photo_type:pending[k].type||'写真',photo_b64:pending[k].dataUrl,memo:''}));
+  const ok = await sbWrite(DB_TABLES.PHOTOS, 'insert', rows, null);
+  if (ok) {
     showToast('写真を保存しました','success');
     window._pendingPhotos={};
     closeAddPhotoModal();
     const order=S.orders.find(o=>o.id===orderId);
     if(order){closeShijishoView();openShijishoView(order);}
-  } catch(e) { showToast('保存失敗: '+e.message,'error'); }
+  } else {
+    showToast('⚠️ 通信失敗。自動で再送信します','error');
+    window._pendingPhotos={};
+    closeAddPhotoModal();
+  }
 }
 
 async function toggleInvoiceDoneDetail(id) {
