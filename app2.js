@@ -1422,6 +1422,7 @@ async function loadList(forceLoadAll) {
   });
   const tomorrowOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')===_tomorrow);
   const futureOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
+  const undecidedOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&!o.dateIn);
   const doneOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='完了'||o.status==='引渡済'));
   const todayDoneOrders=doneOrders.filter(o=>(o.completedAt||'').startsWith(_today));
   const doneOrdersRest=doneOrders.filter(o=>!(o.completedAt||'').startsWith(_today));
@@ -1436,6 +1437,7 @@ async function loadList(forceLoadAll) {
     renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders)+
     renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders)+
     renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders,true)+
+    renderGroup(`🗓️ 日程未定　${undecidedOrders.length}件`,'🗓️','#f5f3ff','#6d28d9','#8b5cf6','#8b5cf6',undecidedOrders,undecidedOrders.length===0)+
     renderGroup(`それ以前の完了・引渡済　${doneOrdersRest.length}件`,'✅','#f8fafc','#64748b','#cbd5e1','#94a3b8',doneOrdersRest,true);
 }
 
@@ -1941,6 +1943,8 @@ function openEditModal(id) {
               <option value="お客入庫" ${order.nyukoMethod==='お客入庫'?'selected':''}>🚗 お客入庫</option>
               <option value="引き取り" ${order.nyukoMethod==='引き取り'?'selected':''}>🔑 引き取り</option>
               <option value="レッカー" ${order.nyukoMethod==='レッカー'?'selected':''}>🚨 レッカー</option>
+              <option value="現地修理" ${order.nyukoMethod==='現地修理'?'selected':''}>🔧 現地修理</option>
+              <option value="車両入替" ${order.nyukoMethod==='車両入替'?'selected':''}>🔁 車両入替</option>
             </select>
           </div>
           <div>
