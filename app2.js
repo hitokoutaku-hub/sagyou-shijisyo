@@ -1254,7 +1254,13 @@ async function loadList(forceLoadAll) {
   const filterType   =document.getElementById('filterType')?.value;
   updateMonthFilter();
   let orders=[...S.orders];
-  if(filterMonth)   orders=orders.filter(o=>(o.dateIn||o.savedAt||'').startsWith(filterMonth));
+  if(filterMonth)   orders=orders.filter(o=>{
+    const d=(o.dateIn||o.savedAt||'');
+    if(d.startsWith(filterMonth)) return true; // この月に入庫したもの
+    // 前月以前に入庫して、まだ完了していないものは繰り越して表示する
+    if(d && d<filterMonth && o.status!=='完了' && o.status!=='引渡済') return true;
+    return false;
+  });
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
   const filterExtra = document.getElementById('filterExtra')?.value;
@@ -1333,6 +1339,9 @@ async function loadList(forceLoadAll) {
     const isPast=(o.dateIn||'')!==''&&(o.dateIn||'')<_today&&o.status!=='引渡済';
     const isUntaken=o.status==='入庫待ち'&&!o.mechName;
     const bookmarkBadge=o.bookmarked?`<span style="color:#7e22ce;font-size:14px;">⭐</span>`:'';
+    const curFilterMonth=document.getElementById('filterMonth')?.value||'';
+    const isCarry=curFilterMonth && (o.dateIn||'') && !(o.dateIn||'').startsWith(curFilterMonth);
+    const carryBadge=isCarry?`<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-right:4px;">📌 前月から繰越</span>`:'';
     const alertMark=isPast?'⚠ ':'';
     const cardBorder=o.status==='作業中'?'2px solid #ef4444':isPast?'2px solid #f97316':'1.5px solid var(--border)';
     // 備考1行目
@@ -1348,7 +1357,7 @@ async function loadList(forceLoadAll) {
     const takeBtn=isUntaken?`<div onclick="takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
     return `<div class="order-item" onclick="if(!event.target.closest('button'))showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;cursor:pointer;">
       <div class="top">
-        <span class="order-num">${bookmarkBadge}${alertMark}${o.orderNum||'（番号なし）'}</span>
+        <span class="order-num">${carryBadge}${bookmarkBadge}${alertMark}${o.orderNum||'（番号なし）'}</span>
       </div>
       <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
@@ -2287,6 +2296,7 @@ async function saveAddedPhotos(orderId) {
 
 async function toggleInvoiceDoneDetail(id) {
   const order = S.orders.find(o=>o.id===id); if(!order) return;
+  const wasNotDone = !(order.invoiceDone||(order.progress||[]).includes('請求書済'));
   order.invoiceDone = !order.invoiceDone;
   // progressからも同期
   if(order.invoiceDone) {
@@ -2325,6 +2335,19 @@ async function toggleInvoiceDoneDetail(id) {
   }
   showToast(done?'📄 請求書済にしました':'📄 請求書未に戻しました','success');
   loadList();
+  if(wasNotDone && done){
+    const nextOrder=(S.orders||[])
+      .filter(o=>o.id!==id)
+      .filter(o=>filterMonth?(o.dateIn||o.savedAt||'').startsWith(filterMonth):true)
+      .filter(o=>!o.invoiceDone && !(o.progress||[]).includes('請求書済'))
+      .sort((a,b)=>(a.dateIn||a.savedAt||'').localeCompare(b.dateIn||b.savedAt||''))[0];
+    closeShijishoView();
+    if(nextOrder){
+      setTimeout(()=>{ showToast(`次: ${nextOrder.orderNum||nextOrder.custName||''}`,'info'); showDetail(nextOrder.id); },350);
+    } else {
+      setTimeout(()=>{ showToast('🎉 未請求の指示書はすべて終わりました','success'); },350);
+    }
+  }
 }
 async function toggleInvoiceDoneList(id) {
   const order = S.orders.find(o => o.id === id);
