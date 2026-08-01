@@ -162,7 +162,7 @@ async function sbSaveOrderOnce(order) {
     prevent_results: order.preventResults, sk_results: order.skResults,
     sk_truck_check: order.skTruckCheckState, sk_truck_notice: order.skTruckNotice,
     sk_truck_prevent: order.skTruckPrevent, sk_truck_lights: order.skTruckLights,
-    saved_at: order.savedAt,
+    saved_at: order.savedAt, completed_at: order.completedAt || null,
     nyuko_method: order.nyukoMethod||'', nyuko_time: order.nyukoTime||'',
     nyuko_place: order.nyukoPlace||'', parts_pending: order.partsPending||false,
     planned_staff: order.plannedStaff||'', invoice_done: order.invoiceDone||false, record_done: order.recordDone||false, bookmarked: order.bookmarked||false, progress: order.progress||[],
@@ -214,19 +214,19 @@ async function sbLoadOrders(loadAll, monthFilter) {
   try {
     let query = sb.from(DB_TABLES.KIROKU).select('*').order('created_at', { ascending: false });
     if (monthFilter) {
-      // 指定月の入庫日のみ（YYYY-MM形式）サーバー側で絞り込む（高速化）
+      // 指定月の入庫日 ＋ まだ完了していないもの（他の月の入庫予定でも）を両方取得する
       const start = monthFilter + '-01';
       const [y, m] = monthFilter.split('-').map(Number);
       const nextMonth = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
-      query = query.gte('date_in', start).lt('date_in', nextMonth);
+      query = query.or(`and(date_in.gte.${start},date_in.lt.${nextMonth}),and(status.neq.完了,status.neq.引渡済)`);
     } else if (!loadAll) {
-      // デフォルトは今月の入庫分のみ（高速化）
+      // デフォルトは今月の入庫分 ＋ まだ完了していないもの（月をまたぐ入庫予定を見失わないため）
       const now = new Date();
       const thisMonth = now.toISOString().substring(0,7);
       const start = thisMonth + '-01';
       const y = now.getFullYear(), m = now.getMonth() + 1;
       const nextMonth = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
-      query = query.gte('date_in', start).lt('date_in', nextMonth);
+      query = query.or(`and(date_in.gte.${start},date_in.lt.${nextMonth}),and(status.neq.完了,status.neq.引渡済)`);
     }
     const { data, error } = await query;
     if (error) throw error;
@@ -243,7 +243,7 @@ async function sbLoadOrders(loadAll, monthFilter) {
       workItems: row.work_items || [], preventResults: row.prevent_results || {},
       skResults: row.sk_results || {}, skTruckCheckState: row.sk_truck_check || {},
       skTruckNotice: row.sk_truck_notice || {}, skTruckPrevent: row.sk_truck_prevent || {},
-      skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at,
+      skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at, completedAt: row.completed_at||'',
       nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
       nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
       plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false, recordDone: row.record_done || false, bookmarked: row.bookmarked || false, progress: row.progress || [],
@@ -1305,7 +1305,8 @@ async function loadList(forceLoadAll) {
     if(a.status==='入庫待ち'&&b.status==='入庫待ち')return (a.dateIn||'').localeCompare(b.dateIn||'');
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=sbReady?'クラウド同期済み':'ローカル保存';
+  const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
@@ -1359,9 +1360,9 @@ async function loadList(forceLoadAll) {
     const cardBorder=o.status==='作業中'?'2px solid #ef4444':isPast?'2px solid #f97316':'1.5px solid var(--border)';
     // 備考1行目
     const remarksPreview=o.remarks?(()=>{const first=o.remarks.trim().split('\n')[0];return first?`<div style="font-size:13px;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📝 ${first}</div>`:''})():'';
-    // ステータスボタン3つ
-    const statuses=[['入庫待ち','#f97316'],['作業中','#ef4444'],['引渡済','#64748b']];
-    const statusBtns=statuses.map(([s,c])=>`<button onclick="quickStatus('${o.id}','${s}');return false;" style="flex:1;padding:10px 4px;font-size:13px;font-weight:700;background:${o.status===s?c:'#f8fafc'};color:${o.status===s?'#fff':'#94a3b8'};border:1.5px solid ${o.status===s?c:'#e2e8f0'};border-radius:10px;cursor:pointer;">${s}</button>`).join('');
+    // ステータスボタン4つ
+    const statuses=[['入庫待ち','入庫待ち','#f97316'],['作業中','作業中','#ef4444'],['作業完了','完了','#8b5cf6'],['引渡済','引渡済','#64748b']];
+    const statusBtns=statuses.map(([label,val,c])=>`<button onclick="quickStatus('${o.id}','${val}');return false;" style="flex:1;padding:10px 4px;font-size:13px;font-weight:700;background:${o.status===val?c:'#f8fafc'};color:${o.status===val?'#fff':'#94a3b8'};border:1.5px solid ${o.status===val?c:'#e2e8f0'};border-radius:10px;cursor:pointer;">${label}</button>`).join('');
     // 進捗ボタン6つ
     const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['📘','3ヵ月点検記録簿済','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
     const prog=o.progress||[];
@@ -1414,7 +1415,7 @@ async function loadList(forceLoadAll) {
     return d && d<_fm && o.status!=='完了' && o.status!=='引渡済';
   });
   const carryIds=new Set(carryoverOrders.map(o=>o.id));
-  const inProgressOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='作業中'||o.status==='入庫中'));
+  const inProgressOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='作業中'||o.status==='入庫中'||o.status==='車検中'));
   const todayOrders=orders.filter(o=>{
     if(carryIds.has(o.id))return false;
     const d=o.dateIn||'';return o.status==='入庫待ち'&&(d===_today||(d!==''&&d<_today));
@@ -1422,17 +1423,20 @@ async function loadList(forceLoadAll) {
   const tomorrowOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')===_tomorrow);
   const futureOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
   const doneOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='完了'||o.status==='引渡済'));
+  const todayDoneOrders=doneOrders.filter(o=>(o.completedAt||'').startsWith(_today));
+  const doneOrdersRest=doneOrders.filter(o=>!(o.completedAt||'').startsWith(_today));
 
   const todayLabel=`今日の入庫予定　${_today.slice(5).replace('-','/')}（${_todayWeekday}）`;
   const tomorrowLabel=`明日の入庫予定　${_tomorrow.slice(5).replace('-','/')}（${_tomorrowWeekday}）`;
 
   c.innerHTML=
     renderGroup(`📌 前月から繰越（未完成）　${carryoverOrders.length}件`,'📌','#fef3c7','#92400e','#f59e0b','#f59e0b',carryoverOrders,carryoverOrders.length===0)+
-    renderGroup('現在進行中','🔨','#fef2f2','#991b1b','#ef4444','#ef4444',inProgressOrders,true)+
-    renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders,true)+
-    renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders,true)+
+    renderGroup(`🎉 今日の完了実績　${todayDoneOrders.length}件`,'🎉','#f0fdf4','#166534','#22c55e','#16a34a',todayDoneOrders,todayDoneOrders.length===0)+
+    renderGroup('現在進行中','🔨','#fef2f2','#991b1b','#ef4444','#ef4444',inProgressOrders)+
+    renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders)+
+    renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders)+
     renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders,true)+
-    renderGroup(`完了・引渡済　${doneOrders.length}件`,'✅','#f8fafc','#64748b','#cbd5e1','#94a3b8',doneOrders,true);
+    renderGroup(`それ以前の完了・引渡済　${doneOrdersRest.length}件`,'✅','#f8fafc','#64748b','#cbd5e1','#94a3b8',doneOrdersRest,true);
 }
 
 // ─── 作業引き受け ────────────────────────────────────────────
@@ -1448,24 +1452,31 @@ async function quickStatus(orderId, newStatus) {
     btn.disabled = true;
   });
   order.status = newStatus;
+  const updatePayload = { status: newStatus };
+  if((newStatus==='完了'||newStatus==='引渡済') && !order.completedAt){
+    order.completedAt = new Date().toISOString();
+    updatePayload.completed_at = order.completedAt;
+  }
   saveState();
   let statusOk = true;
   if (sb) {
-    statusOk = await sbWrite(DB_TABLES.KIROKU, 'update', { status: newStatus }, orderId);
+    statusOk = await sbWrite(DB_TABLES.KIROKU, 'update', updatePayload, orderId);
   }
   showToast(statusOk ? `✅ ステータスを「${newStatus}」に変更しました` : `⚠️ 通信失敗。自動で再送信します（表示は「${newStatus}」のまま）`, statusOk ? 'success' : 'error');
   // ステータスボタンの見た目だけ即時更新（全件再読み込みしない）
-  const statuses = [['入庫待ち','#f97316'],['作業中','#ef4444'],['引渡済','#64748b']];
+  const statusMeta = [['入庫待ち','入庫待ち','#f97316'],['作業中','作業中','#ef4444'],['作業完了','完了','#8b5cf6'],['引渡済','引渡済','#64748b']];
   document.querySelectorAll(`button[onclick*="quickStatus('${orderId}'"]`).forEach(btn => {
     const m = btn.getAttribute('onclick')?.match(/quickStatus\('[^']+','([^']+)'\)/);
     if (!m) return;
-    const s = m[1];
-    const c = statuses.find(x => x[0] === s)?.[1] || '#94a3b8';
-    const on = s === newStatus;
+    const val = m[1];
+    const meta = statusMeta.find(x => x[1] === val);
+    const c = meta?.[2] || '#94a3b8';
+    const label = meta?.[0] || val;
+    const on = val === newStatus;
     btn.style.background = on ? c : '#f8fafc';
     btn.style.color = on ? '#fff' : '#94a3b8';
     btn.style.border = `1.5px solid ${on ? c : '#e2e8f0'}`;
-    btn.textContent = btn.dataset.origText || s;
+    btn.textContent = btn.dataset.origText || label;
     btn.disabled = false;
   });
 }
@@ -2234,6 +2245,7 @@ async function saveEdit() {
   order.dateOut   = document.getElementById('edit-dateOut')?.value          || order.dateOut;
   order.mechName  = document.getElementById('edit-mechName')?.value.trim() || order.mechName;
   order.status    = document.getElementById('edit-status')?.value           || order.status;
+  if((order.status==='完了'||order.status==='引渡済') && !order.completedAt) order.completedAt=new Date().toISOString();
   order.remarks   = document.getElementById('edit-remarks')?.value          || '';
   order.plannedStaff = document.getElementById('edit-plannedStaff')?.value.trim() || '';
   order.nyukoMethod  = document.getElementById('edit-nyukoMethod')?.value  || '';
@@ -2430,7 +2442,9 @@ async function toggleRecordDone(id) {
 
 function changeStatus(id,status) {
   const order=S.orders.find(o=>o.id===id); if(!order) return;
-  order.status=status; saveState(); sbSaveOrder(order);
+  order.status=status;
+  if((status==='完了'||status==='引渡済') && !order.completedAt) order.completedAt=new Date().toISOString();
+  saveState(); sbSaveOrder(order);
   showToast(`ステータスを「${status}」に変更しました`,'success');
   closeShijishoView(); openShijishoView(order); loadList();
 }
@@ -2622,3 +2636,10 @@ function initApp() {
 // ─── 起動 ─────────────────────────────────────────────────────
 initSupabase();
 initAuth();
+setInterval(()=>{
+  // 一覧画面を見ている時だけ、他のスタッフの更新を軽く取り直す（3分に1回、負荷を抑えるため間隔は長め）
+  const listPanel=document.getElementById('panel-list');
+  if(listPanel && listPanel.classList.contains('active') && sbReady && !document.getElementById('shijishoView')){
+    loadList();
+  }
+}, 180000);
