@@ -1217,6 +1217,19 @@ async function manualRefresh() {
   await loadList(true);
   showToast('更新しました ✅', 'success');
 }
+function _todayStr(){
+  const n=new Date();
+  const p=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(n);
+  return `${p.find(x=>x.type==='year').value}-${p.find(x=>x.type==='month').value}-${p.find(x=>x.type==='day').value}`;
+}
+function _curYM(){ return _todayStr().slice(0,7); }
+function inMonthOrCarryover(o, filterMonth){
+  if(!filterMonth) return true;
+  const d=(o.dateIn||o.savedAt||'');
+  if(d.startsWith(filterMonth)) return true;
+  if(d && d<filterMonth && o.status!=='完了' && o.status!=='引渡済') return true;
+  return false;
+}
 async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
@@ -1254,18 +1267,18 @@ async function loadList(forceLoadAll) {
   const filterType   =document.getElementById('filterType')?.value;
   updateMonthFilter();
   let orders=[...S.orders];
-  if(filterMonth)   orders=orders.filter(o=>{
-    const d=(o.dateIn||o.savedAt||'');
-    if(d.startsWith(filterMonth)) return true; // この月に入庫したもの
-    // 前月以前に入庫して、まだ完了していないものは繰り越して表示する
-    if(d && d<filterMonth && o.status!=='完了' && o.status!=='引渡済') return true;
-    return false;
-  });
+  orders=orders.filter(o=>inMonthOrCarryover(o,filterMonth));
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
   const filterExtra = document.getElementById('filterExtra')?.value;
   if(filterExtra==='bookmark') orders=orders.filter(o=>o.bookmarked);
   if(filterExtra==='noInvoice') orders=orders.filter(o=>!o.invoiceDone && !(o.progress||[]).includes('請求書済'));
+  if(filterExtra==='carryover') orders=orders.filter(o=>{
+    const d=(o.dateIn||o.savedAt||'');
+    return d && d<_curYM() && o.status!=='完了' && o.status!=='引渡済';
+  });
+  if(filterExtra==='inProgress') orders=orders.filter(o=>['作業中','車検中','入庫中'].includes(o.status));
+  if(filterExtra==='todayIntake') orders=orders.filter(o=>(o.dateIn||'')===_todayStr());
   if(filterExtra==='noRecord') orders=orders.filter(o=>{
     const is3m = o.repairType==='3month' || [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
     return is3m && !o.recordDone;
@@ -1395,20 +1408,30 @@ async function loadList(forceLoadAll) {
     return `<div style="border-radius:12px;margin-bottom:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">${header}${body}</div>`;
   }
 
-  const inProgressOrders=orders.filter(o=>o.status==='作業中'||o.status==='入庫中');
-  const todayOrders=orders.filter(o=>{const d=o.dateIn||'';return o.status==='入庫待ち'&&(d===_today||(d!==''&&d<_today));});
-  const tomorrowOrders=orders.filter(o=>o.status==='入庫待ち'&&(o.dateIn||'')===_tomorrow);
-  const futureOrders=orders.filter(o=>o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
-  const doneOrders=orders.filter(o=>o.status==='完了'||o.status==='引渡済');
+  const _fm=filterMonth||_curYM();
+  const carryoverOrders=orders.filter(o=>{
+    const d=(o.dateIn||o.savedAt||'');
+    return d && d<_fm && o.status!=='完了' && o.status!=='引渡済';
+  });
+  const carryIds=new Set(carryoverOrders.map(o=>o.id));
+  const inProgressOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='作業中'||o.status==='入庫中'));
+  const todayOrders=orders.filter(o=>{
+    if(carryIds.has(o.id))return false;
+    const d=o.dateIn||'';return o.status==='入庫待ち'&&(d===_today||(d!==''&&d<_today));
+  });
+  const tomorrowOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')===_tomorrow);
+  const futureOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
+  const doneOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='完了'||o.status==='引渡済'));
 
   const todayLabel=`今日の入庫予定　${_today.slice(5).replace('-','/')}（${_todayWeekday}）`;
   const tomorrowLabel=`明日の入庫予定　${_tomorrow.slice(5).replace('-','/')}（${_tomorrowWeekday}）`;
 
   c.innerHTML=
-    renderGroup('現在進行中','🔨','#fef2f2','#991b1b','#ef4444','#ef4444',inProgressOrders)+
-    renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders)+
-    renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders)+
-    renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders)+
+    renderGroup(`📌 前月から繰越（未完成）　${carryoverOrders.length}件`,'📌','#fef3c7','#92400e','#f59e0b','#f59e0b',carryoverOrders,carryoverOrders.length===0)+
+    renderGroup('現在進行中','🔨','#fef2f2','#991b1b','#ef4444','#ef4444',inProgressOrders,true)+
+    renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders,true)+
+    renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders,true)+
+    renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders,true)+
     renderGroup(`完了・引渡済　${doneOrders.length}件`,'✅','#f8fafc','#64748b','#cbd5e1','#94a3b8',doneOrders,true);
 }
 
@@ -1591,7 +1614,7 @@ function openShijishoView(order) {
     </div>
     ${(()=>{
       const filterMonth=document.getElementById('filterMonth')?.value||'';
-      const all=(S.orders||[]).filter(o=>filterMonth?(o.dateIn||o.savedAt||'').startsWith(filterMonth):true);
+      const all=(S.orders||[]).filter(o=>inMonthOrCarryover(o,filterMonth));
       const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
       const total=all.length;
       const done=total-uninvoiced;
@@ -2315,7 +2338,7 @@ async function toggleInvoiceDoneDetail(id) {
   }
   // バナーを再描画
   const filterMonth=document.getElementById('filterMonth')?.value||'';
-  const all=(S.orders||[]).filter(o=>filterMonth?(o.dateIn||o.savedAt||'').startsWith(filterMonth):true);
+  const all=(S.orders||[]).filter(o=>inMonthOrCarryover(o,filterMonth));
   const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
   const total=all.length; const doneCount=total-uninvoiced;
   const pct=total?Math.round(doneCount/total*100):0;
@@ -2338,7 +2361,7 @@ async function toggleInvoiceDoneDetail(id) {
   if(wasNotDone && done){
     const nextOrder=(S.orders||[])
       .filter(o=>o.id!==id)
-      .filter(o=>filterMonth?(o.dateIn||o.savedAt||'').startsWith(filterMonth):true)
+      .filter(o=>inMonthOrCarryover(o,filterMonth))
       .filter(o=>!o.invoiceDone && !(o.progress||[]).includes('請求書済'))
       .sort((a,b)=>(a.dateIn||a.savedAt||'').localeCompare(b.dateIn||b.savedAt||''))[0];
     closeShijishoView();
