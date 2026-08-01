@@ -1225,9 +1225,13 @@ function _todayStr(){
 function _curYM(){ return _todayStr().slice(0,7); }
 function inMonthOrCarryover(o, filterMonth){
   if(!filterMonth) return true;
-  const d=(o.dateIn||o.savedAt||'');
+  const d=(o.dateIn||'');
+  if(!d){
+    // 入庫予定日が未定のものは、月で絞り込んでいても常に表示する（作成日時の書式に依存しない）
+    return o.status!=='完了' && o.status!=='引渡済';
+  }
   if(d.startsWith(filterMonth)) return true;
-  if(d && d<filterMonth && o.status!=='完了' && o.status!=='引渡済') return true;
+  if(d<filterMonth && o.status!=='完了' && o.status!=='引渡済') return true;
   return false;
 }
 async function loadList(forceLoadAll) {
@@ -1274,7 +1278,7 @@ async function loadList(forceLoadAll) {
   if(filterExtra==='bookmark') orders=orders.filter(o=>o.bookmarked);
   if(filterExtra==='noInvoice') orders=orders.filter(o=>!o.invoiceDone && !(o.progress||[]).includes('請求書済'));
   if(filterExtra==='carryover') orders=orders.filter(o=>{
-    const d=(o.dateIn||o.savedAt||'');
+    const d=o.dateIn||'';
     return d && d<_curYM() && o.status!=='完了' && o.status!=='引渡済';
   });
   if(filterExtra==='inProgress') orders=orders.filter(o=>['作業中','車検中','入庫中'].includes(o.status));
@@ -1411,7 +1415,7 @@ async function loadList(forceLoadAll) {
 
   const _fm=filterMonth||_curYM();
   const carryoverOrders=orders.filter(o=>{
-    const d=(o.dateIn||o.savedAt||'');
+    const d=o.dateIn||'';
     return d && d<_fm && o.status!=='完了' && o.status!=='引渡済';
   });
   const carryIds=new Set(carryoverOrders.map(o=>o.id));
