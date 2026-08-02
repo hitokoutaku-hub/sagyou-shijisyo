@@ -1371,11 +1371,19 @@ async function loadList(forceLoadAll) {
     const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['📘','3ヵ月点検記録簿済','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
     const prog=o.progress||[];
     const progressBtns=progressDef.map(([icon,key,bg,color])=>`<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
+    // 車検専用：陸運局まわりの進捗ボタン（車検の指示書のみ表示）
+    const shakkenProgressDef=[['🏢','先に陸運局','#e0f2fe','#0369a1'],['✅','陸運局回送済','#dcfce7','#166534']];
+    const shakkenProgressBtns=o.type==='shakken'?`<div style="margin-top:8px;">
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">🏢 陸運局</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${shakkenProgressDef.map(([icon,key,bg,color])=>`<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('')}</div>
+      </div>`:'';
+    // 陸運局バッジ（一覧で一目で分かるように）
+    const rikuunBadge=o.type==='shakken'?(prog.includes('陸運局回送済')?`<span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-right:4px;">🏢 回送済</span>`:prog.includes('先に陸運局')?`<span style="background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-right:4px;">🏢 陸運局へ先に</span>`:''):'';
     // 私が担当しますボタン
     const takeBtn=isUntaken?`<div onclick="takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
     return `<div class="order-item" onclick="if(!event.target.closest('button'))showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;cursor:pointer;">
       <div class="top">
-        <span class="order-num">${carryBadge}${bookmarkBadge}${alertMark}${o.orderNum||'（番号なし）'}</span>
+        <span class="order-num">${carryBadge}${bookmarkBadge}${rikuunBadge}${alertMark}${o.orderNum||'（番号なし）'}</span>
       </div>
       <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
@@ -1393,6 +1401,7 @@ async function loadList(forceLoadAll) {
         <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">進捗</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${progressBtns}</div>
       </div>
+      ${shakkenProgressBtns}
       ${takeBtn}
     </div>`;
   }
@@ -1509,7 +1518,7 @@ async function quickProgress(orderId, key) {
   const c = document.getElementById('orderList');
   if (c) {
     // ボタンの色だけ即時更新
-    const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['📘','3ヵ月点検記録簿済','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
+    const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['📘','3ヵ月点検記録簿済','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce'],['🏢','先に陸運局','#e0f2fe','#0369a1'],['✅','陸運局回送済','#dcfce7','#166534']];
     progressDef.forEach(([icon, k, bg, color]) => {
       const on = order.progress.includes(k);
       document.querySelectorAll(`button[onclick*="quickProgress('${orderId}','${k}')"]`).forEach(btn => {
