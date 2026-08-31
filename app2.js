@@ -1094,6 +1094,7 @@ async function saveAccident() {
   try {
     S.orders.unshift(order); saveState();
     const ok = await sbSaveOrder(order);
+    await uploadPendingPhotos(order.id);
     showToast(ok ? `✅ 保存しました（${orderNum}）` : '⚠️ クラウド同期失敗。自動で再送信します', ok?'success':'error');
     clearAccident();
   } catch(e) { showToast('保存に失敗しました','error'); }
@@ -1109,6 +1110,7 @@ function clearAccident() {
   document.getElementById('ac-insurance').value='';
   ['ac-preview-repair','ac-preview-receipt'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   currentSubStaff=[];
+  window._pendingPhotos={};
   updateNumDisplay();
 }
 
@@ -1145,6 +1147,7 @@ async function saveShakken() {
   try {
     S.orders.unshift(order); saveState();
     const ok = await sbSaveOrder(order);
+    await uploadPendingPhotos(order.id);
     showToast(ok ? `✅ 保存しました（${orderNum}）` : '⚠️ クラウド同期失敗。自動で再送信します', ok?'success':'error');
     clearShakken();
   } catch(e) { showToast('保存に失敗しました','error'); }
@@ -1161,6 +1164,7 @@ function clearShakken() {
   S.skCheckState={}; S.skTruckCheckState={}; S.skTruckNotice={}; S.skTruckPrevent={}; S.skTruckLights={};
   ['sk-preview-receipt','sk-preview-repair'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   currentSubStaff=[];
+  window._pendingPhotos={};
   renderSkItems();
   updateNumDisplay();
 }
@@ -1223,6 +1227,14 @@ function _todayStr(){
   return `${p.find(x=>x.type==='year').value}-${p.find(x=>x.type==='month').value}-${p.find(x=>x.type==='day').value}`;
 }
 function _curYM(){ return _todayStr().slice(0,7); }
+// UTC保存されたISO日時を、日本時間の「YYYY-MM-DD」に変換する（深夜0時〜9時のズレ対策）
+function _isoToJstDateStr(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const p = new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);
+  return `${p.find(x=>x.type==='year').value}-${p.find(x=>x.type==='month').value}-${p.find(x=>x.type==='day').value}`;
+}
 function inMonthOrCarryover(o, filterMonth){
   if(!filterMonth) return true;
   const d=(o.dateIn||'');
@@ -1231,7 +1243,8 @@ function inMonthOrCarryover(o, filterMonth){
     return o.status!=='完了' && o.status!=='引渡済';
   }
   if(d.startsWith(filterMonth)) return true;
-  if(d<filterMonth && o.status!=='完了' && o.status!=='引渡済') return true;
+  // 過去・未来を問わず、未完了の指示書は月をまたいでも表示し続ける
+  if(o.status!=='完了' && o.status!=='引渡済') return true;
   return false;
 }
 async function loadList(forceLoadAll) {
@@ -1437,8 +1450,8 @@ async function loadList(forceLoadAll) {
   const futureOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
   const undecidedOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&!o.dateIn);
   const doneOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='完了'||o.status==='引渡済'));
-  const todayDoneOrders=doneOrders.filter(o=>(o.completedAt||'').startsWith(_today));
-  const doneOrdersRest=doneOrders.filter(o=>!(o.completedAt||'').startsWith(_today));
+  const todayDoneOrders=doneOrders.filter(o=>_isoToJstDateStr(o.completedAt)===_today);
+  const doneOrdersRest=doneOrders.filter(o=>_isoToJstDateStr(o.completedAt)!==_today);
 
   const todayLabel=`今日の入庫予定　${_today.slice(5).replace('-','/')}（${_todayWeekday}）`;
   const tomorrowLabel=`明日の入庫予定　${_tomorrow.slice(5).replace('-','/')}（${_tomorrowWeekday}）`;
