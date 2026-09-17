@@ -1284,7 +1284,8 @@ async function loadList(forceLoadAll) {
   const filterType   =document.getElementById('filterType')?.value;
   updateMonthFilter();
   let orders=[...S.orders];
-  orders=orders.filter(o=>inMonthOrCarryover(o,filterMonth));
+  // キーワード検索中は「全期間から探す」のが目的なので、月の絞り込みは適用しない
+  if(!filterKeyword) orders=orders.filter(o=>inMonthOrCarryover(o,filterMonth));
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
   const filterExtra = document.getElementById('filterExtra')?.value;
@@ -1300,9 +1301,24 @@ async function loadList(forceLoadAll) {
     const is3m = o.repairType==='3month' || [...(o.carItems||[]),...(o.truckItems||[])].some(i=>i.includes('3ヶ月')||i.includes('３ヶ月')||i.includes('3か月')||i.includes('３か月'));
     return is3m && !o.recordDone;
   });
-  if(filterKeyword) orders=orders.filter(o=>
-    (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
-    (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword));
+  if(filterKeyword){
+    const isNumericKw = /^\d+$/.test(filterKeyword);
+    // 車番・指示書番号のように数字を含む文字列は、数字のまとまり（例：「50あ1234」→「50」「1234」）ごとに区切って
+    // 検索語と完全一致するかを見る（「20」で検索した時に「201」「1520」のような部分一致を拾わないようにするため）
+    const numSegMatch = (str, kw) => {
+      if (!str) return false;
+      const kwNum = parseInt(kw, 10);
+      return str.split(/[^0-9]+/).filter(Boolean).some(seg => seg === kw || parseInt(seg, 10) === kwNum);
+    };
+    orders = orders.filter(o => {
+      if (isNumericKw) {
+        return numSegMatch(o.carPlate, filterKeyword) || numSegMatch(o.orderNum, filterKeyword) ||
+               (o.custName||'').includes(filterKeyword) || (o.carName||'').includes(filterKeyword);
+      }
+      return (o.custName||'').includes(filterKeyword)||(o.carName||'').includes(filterKeyword)||
+             (o.carPlate||'').includes(filterKeyword)||(o.orderNum||'').includes(filterKeyword);
+    });
+  }
   const _n=new Date();
   const _nParts=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(_n);
   const _td=`${_nParts.find(p=>p.type==='year').value}-${_nParts.find(p=>p.type==='month').value}-${_nParts.find(p=>p.type==='day').value}`;
