@@ -1058,7 +1058,7 @@ function clearRepair() {
   });
   const nyukoMethod=document.getElementById('r-nyukoMethod'); if(nyukoMethod) nyukoMethod.value='';
   const partsPending=document.getElementById('r-partsPending'); if(partsPending) partsPending.checked=false;
-  document.getElementById('r-status').value = '入庫中';
+  document.getElementById('r-status').value = '入庫待ち';
   document.getElementById('r-dateIn').value = _todayStr();
   S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; threeMonthCheckState={}; freezerWorkshop='';
   currentSubStaff=[];
@@ -1105,7 +1105,7 @@ function clearAccident() {
   ['ac-custName','ac-carName','ac-carPlate','ac-dateIn','ac-dateOut','ac-remarks','ac-insuranceDirect'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
   });
-  document.getElementById('ac-status').value='入庫中';
+  document.getElementById('ac-status').value='入庫待ち';
   document.getElementById('ac-dateIn').value=_todayStr();
   document.getElementById('ac-insurance').value='';
   ['ac-preview-repair','ac-preview-receipt'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
@@ -1339,7 +1339,7 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.14`;
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.15`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
@@ -1466,6 +1466,9 @@ async function loadList(forceLoadAll) {
   const futureOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
   const undecidedOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&!o.dateIn);
   const doneOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='完了'||o.status==='引渡済'));
+  // どのグループにも当てはまらない指示書（ステータスが空・想定外の値など）も取りこぼさず表示する
+  const _knownStatuses=['入庫待ち','作業中','入庫中','車検中','完了','引渡済'];
+  const unknownStatusOrders=orders.filter(o=>!carryIds.has(o.id)&&!_knownStatuses.includes(o.status));
   const todayDoneOrders=doneOrders.filter(o=>_isoToJstDateStr(o.completedAt)===_today);
   const doneOrdersRest=doneOrders.filter(o=>_isoToJstDateStr(o.completedAt)!==_today);
 
@@ -1479,6 +1482,7 @@ async function loadList(forceLoadAll) {
     renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders)+
     renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders)+
     renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders,futureOrders.length===0)+
+    renderGroup(`⚠️ ステータス未設定（要確認）　${unknownStatusOrders.length}件`,'⚠️','#fef2f2','#991b1b','#ef4444','#ef4444',unknownStatusOrders,unknownStatusOrders.length===0)+
     renderGroup(`🗓️ 日程未定　${undecidedOrders.length}件`,'🗓️','#f5f3ff','#6d28d9','#8b5cf6','#8b5cf6',undecidedOrders,undecidedOrders.length===0)+
     renderGroup(`それ以前の完了・引渡済　${doneOrdersRest.length}件`,'✅','#f8fafc','#64748b','#cbd5e1','#94a3b8',doneOrdersRest,true);
 }
