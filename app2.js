@@ -222,7 +222,7 @@ async function sbLoadOrders(loadAll, monthFilter) {
     } else if (!loadAll) {
       // デフォルトは今月の入庫分 ＋ まだ完了していないもの（月をまたぐ入庫予定を見失わないため）
       const now = new Date();
-      const thisMonth = now.toISOString().substring(0,7);
+      const thisMonth = _todayStr().slice(0,7);
       const start = thisMonth + '-01';
       const y = now.getFullYear(), m = now.getMonth() + 1;
       const nextMonth = m === 12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
@@ -1059,7 +1059,7 @@ function clearRepair() {
   const nyukoMethod=document.getElementById('r-nyukoMethod'); if(nyukoMethod) nyukoMethod.value='';
   const partsPending=document.getElementById('r-partsPending'); if(partsPending) partsPending.checked=false;
   document.getElementById('r-status').value = '入庫中';
-  document.getElementById('r-dateIn').value = new Date().toISOString().split('T')[0];
+  document.getElementById('r-dateIn').value = _todayStr();
   S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; threeMonthCheckState={}; freezerWorkshop='';
   currentSubStaff=[];
   const pc=document.getElementById('r-photos'); if(pc) pc.innerHTML='';
@@ -1106,7 +1106,7 @@ function clearAccident() {
     const el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('ac-status').value='入庫中';
-  document.getElementById('ac-dateIn').value=new Date().toISOString().split('T')[0];
+  document.getElementById('ac-dateIn').value=_todayStr();
   document.getElementById('ac-insurance').value='';
   ['ac-preview-repair','ac-preview-receipt'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   currentSubStaff=[];
@@ -1160,7 +1160,7 @@ function clearShakken() {
   });
   const skNyukoMethod=document.getElementById('sk-nyukoMethod'); if(skNyukoMethod) skNyukoMethod.value='';
   const skPartsPending=document.getElementById('sk-partsPending'); if(skPartsPending) skPartsPending.checked=false;
-  document.getElementById('sk-dateIn').value=new Date().toISOString().split('T')[0];
+  document.getElementById('sk-dateIn').value=_todayStr();
   S.skCheckState={}; S.skTruckCheckState={}; S.skTruckNotice={}; S.skTruckPrevent={}; S.skTruckLights={};
   ['sk-preview-receipt','sk-preview-repair'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   currentSubStaff=[];
@@ -1193,7 +1193,7 @@ function updateMonthFilter() {
     return `<option value="${m}" ${m===current?'selected':''}>${y}年${parseInt(mo)}月</option>`;
   }).join('');
   if(isFirst&&sorted.length>0) {
-    const today=new Date().toISOString().substring(0,7);
+    const today=_curYM();
     if(sorted.includes(today)) sel.value=today;
     sel.dataset.initialized='1';
   } else {
@@ -1478,7 +1478,7 @@ async function loadList(forceLoadAll) {
     renderGroup('現在進行中','🔨','#fef2f2','#991b1b','#ef4444','#ef4444',inProgressOrders)+
     renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders)+
     renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders)+
-    renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders,true)+
+    renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders,futureOrders.length===0)+
     renderGroup(`🗓️ 日程未定　${undecidedOrders.length}件`,'🗓️','#f5f3ff','#6d28d9','#8b5cf6','#8b5cf6',undecidedOrders,undecidedOrders.length===0)+
     renderGroup(`それ以前の完了・引渡済　${doneOrdersRest.length}件`,'✅','#f8fafc','#64748b','#cbd5e1','#94a3b8',doneOrdersRest,true);
 }
@@ -2675,7 +2675,7 @@ function initApp() {
     loadList();
   }, 600);
 
-  const today=new Date().toISOString().split('T')[0];
+  const today=_todayStr();
   ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
 }
 
