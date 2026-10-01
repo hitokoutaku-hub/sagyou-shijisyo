@@ -997,6 +997,18 @@ async function saveRepair() {
   const carName  = document.getElementById('r-carName').value.trim();
   if (!custName && !carName) { showToast('顧客名か車名を入力してください', 'error'); return; }
 
+  // 二重作成の防止：同じ車番、または同じ顧客名＋車名の指示書が既にないか確認する
+  const carPlateVal = document.getElementById('r-carPlate').value.trim();
+  const dup = S.orders.find(o => {
+    if (carPlateVal && (o.carPlate||'').trim() === carPlateVal) return true;
+    if (!carPlateVal && custName && carName && (o.custName||'').trim()===custName && (o.carName||'').trim()===carName) return true;
+    return false;
+  });
+  if (dup) {
+    const ok = confirm(`⚠️ 同じ${carPlateVal?'車番':'顧客名・車名'}の指示書が既にあります。\n\n${dup.orderNum||'（番号なし）'}　${dup.custName||''}　${dup.carName||''}${dup.carPlate?'【'+dup.carPlate+'】':''}\n入庫日：${dup.dateIn||'未設定'}　ステータス：${dup.status||'未設定'}\n\nこのまま新しく保存すると、2件に分かれてしまいます。\n本当にこのまま新規保存しますか？`);
+    if (!ok) return;
+  }
+
   setSaving('btnSaveRepair', true);
   const preventResults = {};
   DEF_PREVENT_OKNG.forEach(label => { if (S.preventOkNg?.[label]) preventResults[label]=S.preventOkNg[label]; });
@@ -1339,7 +1351,7 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.15`;
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.16`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
