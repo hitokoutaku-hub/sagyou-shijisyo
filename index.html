@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>整備指示書</title>
+  <!-- ホーム画面アイコン・アプリ名 -->
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-title" content="整備指示書">
+  <meta name="application-name" content="整備指示書">
+  <meta name="theme-color" content="#f97316">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
@@ -72,6 +79,7 @@
           <option value="inProgress">🔨 現在進行中</option>
           <option value="todayIntake">🔥 今日の入庫</option>
           <option value="noInvoice">📄 請求書未済</option>
+          <option value="deliveredNoInvoice">🚨 引渡済・請求書未</option>
           <option value="noRecord">📘 3ヵ月点検未済</option>
           <option value="bookmark">⭐ ブックマーク</option>
         </select>
@@ -458,7 +466,7 @@
   </div>
 </div>
 
-<script src="auth.js?v=2"></script>
-<script src="app2.js?v=16"></script>
+<script src="auth.js?v=3"></script>
+<script src="app2.js?v=19"></script>
 </body>
 </html>

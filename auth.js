@@ -7,6 +7,37 @@
 let currentUser = null;
 let staffList   = [];
 
+// ─── 文字の無害化（名前などに記号が入っても画面が崩れないように）──
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// onclick="fn('…')" の中に入れる文字用
+function jsArg(v) {
+  return esc(String(v ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
+
+// ─── PIN関連 ─────────────────────────────────────────────────
+// PIN本体は端末に保存しない。オフラインログイン用に「照合用の値（ハッシュ）」だけ残す
+async function _pinHash(id, pin) {
+  if (!window.crypto?.subtle) return null;
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`wc:${id}:${pin}`));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function _getPinHashes() {
+  try { return JSON.parse(localStorage.getItem('wc_pin_hashes') || '{}'); } catch(e) { return {}; }
+}
+async function _rememberPin(id, pin) {
+  const h = await _pinHash(id, pin); if (!h) return;
+  const all = _getPinHashes(); all[id] = h;
+  localStorage.setItem('wc_pin_hashes', JSON.stringify(all));
+}
+function _saveStaffCache() {
+  // 古い版で保存されていたPINは消してからキャッシュする
+  const safe = staffList.map(({ id, name, is_owner }) => ({ id, name, is_owner }));
+  staffList = safe;
+  localStorage.setItem('wc_staff_cache', JSON.stringify(safe));
+}
+
 // ─── ログイン画面初期化 ───────────────────────────────────────
 async function initAuth() {
   // セッション復元（ページリロード時）→ Supabase不要でそのまま入れる
@@ -23,6 +54,7 @@ async function initAuth() {
   const cachedStaff = localStorage.getItem('wc_staff_cache');
   if (cachedStaff) {
     try { staffList = JSON.parse(cachedStaff); } catch(e) { staffList = []; }
+    _saveStaffCache(); // 以前の版がPINを保存していた場合はここで消す
   }
 
   // Supabaseからスタッフ一覧取得（失敗してもキャッシュで続行）
@@ -36,12 +68,11 @@ async function loadStaffForLogin() {
   try {
     const { data, error } = await sb
       .from(DB_TABLES.STAFF)
-      .select('id, name, is_owner, pin')
+      .select('id, name, is_owner')
       .order('is_owner', { ascending: false });
     if (error) throw error;
     staffList = data || [];
-    // ローカルにキャッシュ保存（PIN含む）
-    localStorage.setItem('wc_staff_cache', JSON.stringify(staffList));
+    _saveStaffCache(); // 名前と権限だけ保存（PINは保存しない）
   } catch(e) {
     console.log('スタッフ取得エラー（オフラインモード）:', e);
     // キャッシュがあればそのまま使う（staffListは既にセット済み）
@@ -73,9 +104,9 @@ function renderLoginScreen() {
   }
 
   const userBtns = staffList.map(s => `
-    <button class="login-user-btn ${s.is_owner ? 'owner-btn' : ''}" onclick="selectStaff('${s.id}','${s.name.replace(/'/g,"\\'")}',${s.is_owner})">
+    <button class="login-user-btn ${s.is_owner ? 'owner-btn' : ''}" onclick="selectStaff('${jsArg(s.id)}','${jsArg(s.name)}',${!!s.is_owner})">
       <div class="login-user-avatar ${s.is_owner ? 'owner' : ''}">${s.is_owner ? '👑' : '👤'}</div>
-      <span>${s.name}</span>
+      <span>${esc(s.name)}</span>
       ${s.is_owner ? '<span style="margin-left:auto;font-size:10px;color:var(--owner);font-weight:700">オーナー</span>' : ''}
     </button>`).join('');
 
@@ -111,7 +142,9 @@ function renderLoginScreen() {
       </div>
     </div>`;
 
+  if (document.getElementById('pinStyle')) return;
   const style = document.createElement('style');
+  style.id = 'pinStyle';
   style.textContent = `
     .pin-dot { width:14px;height:14px;border-radius:50%;background:var(--border);transition:.15s; }
     .pin-dot.filled { background:var(--accent); }
@@ -159,58 +192,59 @@ async function pinPress(val) {
   }
 }
 
+let _loginBusy = false;
 async function attemptLogin() {
-  if (!selectedStaff) return;
+  if (!selectedStaff || _loginBusy) return;
+  _loginBusy = true;
   const errEl = document.getElementById('loginError');
   errEl.textContent = '';
+  const pin = pinInput;
+  const fail = (msg) => { errEl.textContent = msg; pinInput = ''; updatePinDisplay(); };
 
-  // まずキャッシュからPIN照合（オフライン対応）
-  const cached = staffList.find(s => s.id === selectedStaff.id);
-  if (cached && cached.pin) {
-    if (cached.pin !== pinInput) {
-      errEl.textContent = 'PINコードが違います';
-      pinInput = '';
-      updatePinDisplay();
-      return;
-    }
-    // PINが一致 → ログイン成功
-    currentUser = { id: cached.id, name: cached.name, is_owner: cached.is_owner };
-    sessionStorage.setItem('wc_current_user', JSON.stringify(currentUser));
-    // オンラインならログ記録（失敗しても続行）
-    if (sbReady) {
-      try { await recordLog('login'); } catch(e) {}
-    }
-    onLoginSuccess();
-    return;
-  }
-
-  // キャッシュにPINがない場合はSupabaseで照合
   try {
-    const { data, error } = await sb
-      .from(DB_TABLES.STAFF)
-      .select('id, name, is_owner, pin')
-      .eq('id', selectedStaff.id)
-      .single();
-    if (error) throw error;
-    if (data.pin !== pinInput) {
-      errEl.textContent = 'PINコードが違います';
-      pinInput = '';
-      updatePinDisplay();
-      return;
+    // ① オンライン：サーバーでPINを照合（PINそのものは端末に送られてこない）
+    if (sb && sbReady && navigator.onLine !== false) {
+      const { data, error } = await sb.rpc('verify_staff_pin', { p_id: selectedStaff.id, p_pin: pin });
+      if (!error) {
+        if (data?.locked) return fail('PINを続けて間違えたため10分間ロック中です');
+        if (!data?.ok)    return fail('PINコードが違います');
+        currentUser = { id: data.id, name: data.name, is_owner: !!data.is_owner };
+        await _rememberPin(data.id, pin);
+        return _finishLogin(true);
+      }
+      // サーバー側の設定（SQL）がまだの時だけ、旧方式で照合する
+      const notInstalled = error.code === 'PGRST202' || /verify_staff_pin/.test(error.message || '');
+      if (notInstalled) {
+        const { data: row, error: e2 } = await sb.from(DB_TABLES.STAFF)
+          .select('id, name, is_owner, pin').eq('id', selectedStaff.id).single();
+        if (e2) throw e2;
+        if (String(row.pin) !== pin) return fail('PINコードが違います');
+        currentUser = { id: row.id, name: row.name, is_owner: !!row.is_owner };
+        await _rememberPin(row.id, pin);
+        return _finishLogin(true);
+      }
+      throw error;
     }
-    currentUser = { id: data.id, name: data.name, is_owner: data.is_owner };
-    sessionStorage.setItem('wc_current_user', JSON.stringify(currentUser));
-    // キャッシュ更新
-    const idx = staffList.findIndex(s => s.id === data.id);
-    if (idx >= 0) staffList[idx] = data;
-    localStorage.setItem('wc_staff_cache', JSON.stringify(staffList));
-    await recordLog('login');
-    onLoginSuccess();
+    throw new Error('offline');
   } catch(e) {
-    errEl.textContent = 'サーバーに接続できません。再試行してください。';
-    pinInput = '';
-    updatePinDisplay();
+    // ② オフライン：この端末で前にログインしたことがあれば照合できる
+    const saved = _getPinHashes()[selectedStaff.id];
+    const h = await _pinHash(selectedStaff.id, pin);
+    if (saved && h) {
+      if (saved !== h) return fail('PINコードが違います');
+      currentUser = { id: selectedStaff.id, name: selectedStaff.name, is_owner: !!selectedStaff.is_owner };
+      return _finishLogin(false);
+    }
+    fail('サーバーに接続できません。電波の良い所で再試行してください。');
+  } finally {
+    _loginBusy = false;
   }
+}
+
+async function _finishLogin(online) {
+  sessionStorage.setItem('wc_current_user', JSON.stringify(currentUser));
+  if (online) { try { await recordLog('login'); } catch(e) {} }
+  onLoginSuccess();
 }
 
 async function recordLog(action) {
