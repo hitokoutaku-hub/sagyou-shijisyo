@@ -60,6 +60,7 @@ function loadState() {
 }
 
 function saveState() {
+  _dniCache.t = 0;
   const toSave = { ...S, orders: [] };
   localStorage.setItem('ws3_state', JSON.stringify(toSave));
 }
@@ -209,6 +210,27 @@ async function sbSaveOrder(order, _attempt) {
   }
 }
 
+function _rowToOrder(row) {
+  return {
+      id: row.id, orderNum: row.order_num, type: row.order_type, status: row.status,
+      custName: row.cust_name, carName: row.car_name, carPlate: row.car_plate,
+      dateIn: row.date_in, dateOut: row.date_out,
+      mechName: row.mech_name, mechId: row.mech_id,
+      subStaff: row.sub_staff || [],
+      receptionName: row.reception_name, remarks: row.remarks, insurance: row.insurance,
+      repairType: row.repair_type,
+      carItems: row.car_items || [], truckItems: row.truck_items || [],
+      airconItems: row.aircon_items || [], noticeItems: row.notice_items || [],
+      workItems: row.work_items || [], preventResults: row.prevent_results || {},
+      skResults: row.sk_results || {}, skTruckCheckState: row.sk_truck_check || {},
+      skTruckNotice: row.sk_truck_notice || {}, skTruckPrevent: row.sk_truck_prevent || {},
+      skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at, completedAt: row.completed_at||'',
+      nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
+      nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
+      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false, recordDone: row.record_done || false, bookmarked: row.bookmarked || false, progress: row.progress || [],
+  };
+}
+
 async function sbLoadOrders(loadAll, monthFilter) {
   if (!sb) return null;
   try {
@@ -230,24 +252,7 @@ async function sbLoadOrders(loadAll, monthFilter) {
     }
     const { data, error } = await query;
     if (error) throw error;
-    return data.map(row => ({
-      id: row.id, orderNum: row.order_num, type: row.order_type, status: row.status,
-      custName: row.cust_name, carName: row.car_name, carPlate: row.car_plate,
-      dateIn: row.date_in, dateOut: row.date_out,
-      mechName: row.mech_name, mechId: row.mech_id,
-      subStaff: row.sub_staff || [],
-      receptionName: row.reception_name, remarks: row.remarks, insurance: row.insurance,
-      repairType: row.repair_type,
-      carItems: row.car_items || [], truckItems: row.truck_items || [],
-      airconItems: row.aircon_items || [], noticeItems: row.notice_items || [],
-      workItems: row.work_items || [], preventResults: row.prevent_results || {},
-      skResults: row.sk_results || {}, skTruckCheckState: row.sk_truck_check || {},
-      skTruckNotice: row.sk_truck_notice || {}, skTruckPrevent: row.sk_truck_prevent || {},
-      skTruckLights: row.sk_truck_lights || {}, savedAt: row.saved_at, completedAt: row.completed_at||'',
-      nyukoMethod: row.nyuko_method || '', nyukoTime: row.nyuko_time || '',
-      nyukoPlace: row.nyuko_place || '', partsPending: row.parts_pending || false,
-      plannedStaff: row.planned_staff || '', invoiceDone: row.invoice_done || false, recordDone: row.record_done || false, bookmarked: row.bookmarked || false, progress: row.progress || [],
-    }));
+    return data.map(_rowToOrder);
   } catch(e) { console.log('Supabase読み込みエラー:', e); return null; }
 }
 
@@ -259,6 +264,47 @@ async function sbDeleteOrder(id) {
 
 // ─── 写真管理 ────────────────────────────────────────────────
 let photoCounter = 0;
+
+// ─── 写真の保存先（Supabase Storage）────────────────────────
+// 新しい写真は Storage に置き、データベースには URL だけ保存する（一覧・詳細が軽くなる）
+// Storage が使えない時（オフライン・未設定）は従来どおりデータベースに直接保存する
+const PHOTO_BUCKET = 'sagyou-photos';
+var _storageReady = null; // null=未確認 / false=未設定
+function _photoSrc(p) { return p.photo_url || p.photo_b64 || ''; }
+function _dataUrlToBlob(dataUrl) {
+  const [head, b64] = dataUrl.split(',');
+  const mime = (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+  const bin = atob(b64); const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+function _storagePathFromUrl(url) {
+  const key = `/object/public/${PHOTO_BUCKET}/`;
+  const i = (url || '').indexOf(key);
+  return i >= 0 ? decodeURIComponent(url.slice(i + key.length).split('?')[0]) : '';
+}
+async function _uploadPhotoToStorage(orderId, dataUrl) {
+  if (!sb || !sbReady || !sb.storage || _storageReady === false || navigator.onLine === false) return null;
+  try {
+    const path = `${orderId}/${Date.now()}_${Math.random().toString(36).slice(2, 10)}.jpg`;
+    const { error } = await sb.storage.from(PHOTO_BUCKET).upload(path, _dataUrlToBlob(dataUrl), { contentType: 'image/jpeg', upsert: false });
+    if (error) throw error;
+    _storageReady = true;
+    return sb.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+  } catch (e) {
+    console.log('Storage保存エラー（データベースに直接保存します）:', e);
+    if (/bucket not found/i.test(e?.message || '')) _storageReady = false;
+    return null;
+  }
+}
+async function _buildPhotoRows(orderId, list) {
+  return Promise.all(list.map(async ({ type, dataUrl }) => {
+    const url = await _uploadPhotoToStorage(orderId, dataUrl);
+    return url
+      ? { kiroku_id: orderId, photo_type: type, photo_b64: '', photo_url: url, memo: '' }
+      : { kiroku_id: orderId, photo_type: type, photo_b64: dataUrl, memo: '' };
+  }));
+}
 
 async function loadPhotosForOrder(orderId) {
   if (!sb) return [];
@@ -326,7 +372,7 @@ async function uploadPendingPhotos(orderId) {
   const pending = window._pendingPhotos || {};
   const keys    = Object.keys(pending);
   if (!keys.length || !sb) return;
-  const rows = keys.map(k => ({ kiroku_id: orderId, photo_type: pending[k].type, photo_b64: pending[k].dataUrl, memo: '' }));
+  const rows = await _buildPhotoRows(orderId, keys.map(k => ({ type: pending[k].type, dataUrl: pending[k].dataUrl })));
   const ok = await sbWrite(DB_TABLES.PHOTOS, 'insert', rows, null);
   if (!ok) showToast('⚠️ 写真の保存に失敗。自動で再送信します', 'error');
   window._pendingPhotos = {};
@@ -344,8 +390,12 @@ function previewPhoto(inputId, previewId) {
 
 async function deletePhoto(photoId, slotId) {
   if (!confirm('この写真を削除しますか？')) return;
-  document.getElementById(slotId)?.remove();
+  const slot = document.getElementById(slotId);
+  const url  = slot?.querySelector('img')?.dataset.url || '';
+  slot?.remove();
   if (sb && photoId) { await sbWrite(DB_TABLES.PHOTOS, 'delete', null, photoId); }
+  const path = _storagePathFromUrl(url);
+  if (sb && path) { try { await sb.storage.from(PHOTO_BUCKET).remove([path]); } catch(e) {} }
 }
 
 function selectAllPhotos(val) { document.querySelectorAll('[id^="photo-check-"]').forEach(cb => cb.checked = val); }
@@ -353,9 +403,14 @@ function selectAllPhotos(val) { document.querySelectorAll('[id^="photo-check-"]'
 function downloadSelectedPhotos() {
   const checked = document.querySelectorAll('[id^="photo-check-"]:checked');
   if (!checked.length) { showToast('写真を選択してください', 'error'); return; }
-  checked.forEach((cb, i) => {
+  checked.forEach(async (cb, i) => {
+    let href = cb.dataset.src;
+    // Storage の写真は一度取り込んでから保存（別サイト扱いでファイル名が付かないため）
+    if (/^https?:/.test(href)) {
+      try { href = URL.createObjectURL(await (await fetch(href)).blob()); } catch(e) {}
+    }
     const a = document.createElement('a');
-    a.href = cb.dataset.b64; a.download = `${cb.dataset.type||'写真'}_${i+1}.jpg`; a.click();
+    a.href = href; a.download = `${cb.dataset.type||'写真'}_${i+1}.jpg`; a.click();
   });
 }
 
@@ -390,6 +445,15 @@ async function fetchNextOrderNum() {
 }
 
 async function genOrderNum() {
+  // サーバー側で1つずつ採番（同時に保存しても番号が重ならない）
+  if (sb && sbReady) {
+    try {
+      const { data, error } = await sb.rpc('next_order_num');
+      if (!error && Number.isInteger(data) && data > 0) return String(data).padStart(4, '0');
+      if (error) console.log('サーバー採番エラー（端末側で採番）:', error);
+    } catch(e) { console.log('サーバー採番エラー（端末側で採番）:', e); }
+  }
+  // オフライン・SQL未設定時は従来どおり端末側で計算
   const next = await fetchNextOrderNum();
   return String(next).padStart(4, '0');
 }
@@ -457,9 +521,9 @@ async function renderMechSelect(containerId) {
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
       ${allStaff.map(s => `
         <button id="mech-btn-${containerId}-${s.id}"
-          onclick="selectMech('${containerId}','${s.id}','${s.name.replace(/'/g,"\\'")}')"
+          onclick="selectMech('${containerId}','${jsArg(s.id)}','${jsArg(s.name)}')"
           style="${btnStyle(s)}"
-        >${s.is_owner ? '👑' : '👤'} ${s.name}</button>`).join('')}
+        >${s.is_owner ? '👑' : '👤'} ${esc(s.name)}</button>`).join('')}
     </div>
     <input type="hidden" id="mech-id-${containerId}" value="">
     <input type="hidden" id="mech-name-${containerId}" value="">
@@ -504,11 +568,11 @@ async function renderSubStaffArea() {
     } catch(e) {}
   }
   const subTags = currentSubStaff.map(s =>
-    `<span class="sub-staff-tag">👤 ${s.name}<button onclick="removeSubStaff('${s.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;margin-left:4px">×</button></span>`
+    `<span class="sub-staff-tag">👤 ${esc(s.name)}<button onclick="removeSubStaff('${jsArg(s.id)}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;margin-left:4px">×</button></span>`
   ).join('');
   const staffBtns = allStaff
     .filter(s => !currentSubStaff.find(sub => sub.id === s.id))
-    .map(s => `<button class="btn btn-gray btn-sm" onclick="addSubStaff('${s.id}','${s.name.replace(/'/g,"\\'")}')">＋ ${s.name}</button>`)
+    .map(s => `<button class="btn btn-gray btn-sm" onclick="addSubStaff('${jsArg(s.id)}','${jsArg(s.name)}')">＋ ${esc(s.name)}</button>`)
     .join('');
   area.innerHTML = `
     <div class="sub-staff-area">
@@ -781,8 +845,8 @@ async function loadMasters() {
     if (error) throw error;
     const customers = data.filter(d => d.category==='customer');
     const cars      = data.filter(d => d.category==='car');
-    document.getElementById('custNameList').innerHTML = customers.map(c=>`<option value="${c.name}">`).join('');
-    document.getElementById('carNameList').innerHTML  = cars.map(c=>`<option value="${c.name}">`).join('');
+    document.getElementById('custNameList').innerHTML = customers.map(c=>`<option value="${esc(c.name)}">`).join('');
+    document.getElementById('carNameList').innerHTML  = cars.map(c=>`<option value="${esc(c.name)}">`).join('');
   } catch(e) { console.log('マスター読み込みエラー:', e); }
 }
 
@@ -812,7 +876,7 @@ async function removeMaster(id) {
 async function loadStaffForSettings() {
   if (!sb) return;
   try {
-    const { data, error } = await sb.from(DB_TABLES.STAFF).select('*').order('is_owner', { ascending: false });
+    const { data, error } = await sb.from(DB_TABLES.STAFF).select('id,name,is_owner').order('is_owner', { ascending: false });
     if (error) throw error;
     const el = document.getElementById('staffList');
     if (el) {
@@ -821,10 +885,10 @@ async function loadStaffForSettings() {
           <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
             <span style="font-size:18px">${s.is_owner?'👑':'👤'}</span>
             <div style="flex:1">
-              <div style="font-size:15px;font-weight:700">${s.name}</div>
-              <div style="font-size:11px;color:var(--sub)">${s.is_owner?'オーナー':'スタッフ'} · PIN: ${'●'.repeat(s.pin?.length||4)}</div>
+              <div style="font-size:15px;font-weight:700">${esc(s.name)}</div>
+              <div style="font-size:11px;color:var(--sub)">${s.is_owner?'オーナー':'スタッフ'} · PIN: ●●●●</div>
             </div>
-            ${!s.is_owner ? `<button class="btn btn-danger btn-sm" onclick="removeStaff('${s.id}')">削除</button>` : ''}
+            ${!s.is_owner ? `<button class="btn btn-danger btn-sm" onclick="removeStaff('${jsArg(s.id)}')">削除</button>` : ''}
           </div>`).join('')
         : '<span style="color:var(--sub);font-size:13px">スタッフがいません</span>';
     }
@@ -976,7 +1040,7 @@ function renderSettings() {
       <button class="btn btn-primary btn-sm" onclick="addInsurance()">追加</button>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:4px">
-      ${(S.insuranceCompanies||[]).map((name,i)=>`<span class="staff-tag" style="font-size:12px">${name}<button onclick="removeInsurance(${i})">×</button></span>`).join('')}
+      ${(S.insuranceCompanies||[]).map((name,i)=>`<span class="staff-tag" style="font-size:12px">${esc(name)}<button onclick="removeInsurance(${i})">×</button></span>`).join('')}
     </div>`;
 
   document.getElementById('gasUrl').value = S.gasUrl||'';
@@ -990,6 +1054,162 @@ function updateSyncUI() {
 function saveGasUrl() { S.gasUrl=document.getElementById('gasUrl').value.trim(); saveState(); showToast('保存しました','success'); }
 function clearGasUrl() { S.gasUrl=''; document.getElementById('gasUrl').value=''; saveState(); showToast('削除しました','info'); }
 
+// ─── 車番から前回の作業を表示 ─────────────────────────────────
+const PLATE_FORMS = [
+  { plate: 'r-carPlate',  cust: 'r-custName',  car: 'r-carName'  },
+  { plate: 'sk-carPlate', cust: 'sk-custName', car: 'sk-carName' },
+  { plate: 'ac-carPlate', cust: 'ac-custName', car: 'ac-carName' },
+];
+const _plateHistTimers = {};
+const _plateHistCache  = {};
+function _orderTypeLabel(o) {
+  if (o.type === 'shakken')  return '車検';
+  if (o.type === 'accident') return '事故修理';
+  return ({ '3month': '3か月点検', aircon: 'クーラー修理', freezer: '冷凍機修理' })[o.repairType] || '一般修理';
+}
+function _orderWorkSummary(o) {
+  const items = [
+    ...(o.carItems||[]), ...(o.truckItems||[]), ...(o.airconItems||[]),
+    ...Object.entries(o.skResults||{}).filter(([k,v]) => v && k.trim()).map(([k,v]) => `${k}(${v})`),
+    ...(o.workItems||[]),
+  ];
+  const memo = (o.remarks||'').trim().split('\n')[0];
+  return { items, memo };
+}
+async function fetchPlateHistory(plate) {
+  const np = _normPlate(plate);
+  if (np.length < 4) return [];
+  if (_plateHistCache[np] && Date.now() - _plateHistCache[np].t < 60000) return _plateHistCache[np].list;
+  const found = new Map();
+  (S.orders||[]).forEach(o => { if (_normPlate(o.carPlate) === np) found.set(o.id, o); });
+  const digits = (np.match(/(\d{2,4})$/) || [])[1];
+  if (sb && sbReady && digits) {
+    try {
+      // 末尾2桁で大まかに取ってから、スペース等を無視して完全一致するものだけ残す
+      const { data, error } = await sb.from(DB_TABLES.KIROKU)
+        .select('id,order_num,order_type,repair_type,status,cust_name,car_name,car_plate,date_in,mech_name,car_items,truck_items,aircon_items,work_items,sk_results,remarks')
+        .ilike('car_plate', `%${digits.slice(-2)}%`)
+        .order('date_in', { ascending: false })
+        .limit(300);
+      if (!error) (data||[]).forEach(r => {
+        if (_normPlate(r.car_plate) === np && !found.has(r.id)) found.set(r.id, { ..._rowToOrder(r), _partial: true });
+      });
+    } catch(e) { console.log('履歴取得エラー:', e); }
+  }
+  const list = [...found.values()].sort((a,b) => (b.dateIn||'').localeCompare(a.dateIn||''));
+  _plateHistCache[np] = { t: Date.now(), list };
+  return list;
+}
+async function renderPlateHistory(form) {
+  const input = document.getElementById(form.plate); if (!input) return;
+  const boxId = form.plate + '-history';
+  let box = document.getElementById(boxId);
+  const plate = input.value.trim();
+  if (_normPlate(plate).length < 4) { box?.remove(); return; }
+  const list = await fetchPlateHistory(plate);
+  if (input.value.trim() !== plate) return; // 入力が変わっていたら捨てる
+  if (!list.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.id = boxId; box.className = 'plate-history';
+    let anchor = input;
+    while (anchor.parentElement && !anchor.parentElement.classList.contains('card')) anchor = anchor.parentElement;
+    anchor.after(box);
+  }
+  const latest = list[0];
+  const custEl = document.getElementById(form.cust), carEl = document.getElementById(form.car);
+  const canFill = (custEl && !custEl.value.trim() && latest.custName) || (carEl && !carEl.value.trim() && latest.carName);
+  box.innerHTML = `
+    <div style="margin:10px 0 4px;padding:12px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:700;color:#1d4ed8">🕘 この車の過去の作業 ${list.length}件</span>
+        ${canFill ? `<button onclick="fillFromHistory('${form.plate}')" style="background:#1d4ed8;color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">顧客名・車名を入れる</button>` : ''}
+      </div>
+      ${list.slice(0,3).map(o => {
+        const { items, memo } = _orderWorkSummary(o);
+        return `<div onclick="openHistoryOrder('${jsArg(o.id)}')" style="background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:9px 10px;margin-bottom:6px;cursor:pointer">
+          <div style="font-size:13px;font-weight:700;color:#1e2433">${esc(o.dateIn||'日付なし')}　${_orderTypeLabel(o)}　<span style="color:#64748b;font-weight:600">${esc(o.custName)} ${esc(o.carName)}${o.mechName?'・担当 '+esc(o.mechName):''}</span></div>
+          ${items.length ? `<div style="font-size:13px;color:#c2410c;margin-top:3px">🔧 ${esc(items.slice(0,5).join('・'))}${items.length>5?' ほか'+(items.length-5)+'件':''}</div>` : ''}
+          ${memo ? `<div style="font-size:12px;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 ${esc(memo)}</div>` : ''}
+        </div>`;
+      }).join('')}
+      ${list.length>3 ? `<div style="font-size:12px;color:#64748b;text-align:right">ほか${list.length-3}件（一覧で車番検索すると全部見られます）</div>` : ''}
+    </div>`;
+}
+function fillFromHistory(plateId) {
+  const form = PLATE_FORMS.find(f => f.plate === plateId); if (!form) return;
+  const list = _plateHistCache[_normPlate(document.getElementById(plateId).value)]?.list || [];
+  const latest = list[0]; if (!latest) return;
+  const custEl = document.getElementById(form.cust), carEl = document.getElementById(form.car);
+  if (custEl && !custEl.value.trim()) custEl.value = latest.custName || '';
+  if (carEl  && !carEl.value.trim())  carEl.value  = latest.carName  || '';
+  renderPlateHistory(form);
+  showToast('前回の顧客名・車名を入れました', 'success');
+}
+async function openHistoryOrder(id) {
+  let order = S.orders.find(o => o.id === id);
+  if (!order && sb) {
+    try {
+      const { data, error } = await sb.from(DB_TABLES.KIROKU).select('*').eq('id', id).single();
+      if (!error && data) { order = _rowToOrder(data); S.orders.push(order); }
+    } catch(e) {}
+  }
+  if (!order) { showToast('この指示書を開けませんでした', 'error'); return; }
+  currentOrder = order;
+  openShijishoView(order);
+}
+function hidePlateHistory(plateId) { document.getElementById(plateId + '-history')?.remove(); }
+function setupPlateHistory() {
+  PLATE_FORMS.forEach(form => {
+    const input = document.getElementById(form.plate);
+    if (!input || input.dataset.histReady) return;
+    input.dataset.histReady = '1';
+    const run = (delay) => {
+      clearTimeout(_plateHistTimers[form.plate]);
+      _plateHistTimers[form.plate] = setTimeout(() => renderPlateHistory(form), delay);
+    };
+    input.addEventListener('input',  () => run(600));
+    input.addEventListener('change', () => run(0));
+  });
+}
+
+// ─── 二重作成チェック ─────────────────────────────────────────
+// 同じ車でも、入庫日が離れている過去の指示書（例：7月分）は別件なので対象外にする
+const DUP_CHECK_DAYS = 14;
+function _normPlate(v) {
+  return (v||'').normalize('NFKC').replace(/[\s・\-ー－]/g, '');
+}
+function _orderBaseDate(o) {
+  if (o.dateIn) return o.dateIn;
+  // 入庫日が空なら作成時刻（id は Date.now()）から日付を出す
+  if (/^\d{13}$/.test(o.id||'')) return _isoToJstDateStr(new Date(+o.id).toISOString());
+  return '';
+}
+function _daysBetween(a, b) {
+  const da = new Date(a + 'T00:00:00'), db = new Date(b + 'T00:00:00');
+  if (isNaN(da) || isNaN(db)) return Infinity;
+  return Math.abs(Math.round((da - db) / 86400000));
+}
+function findRecentDuplicate(plate, custName, carName, dateIn) {
+  const p = _normPlate(plate);
+  const base = dateIn || _todayStr();
+  let best = null, bestDiff = Infinity;
+  (S.orders||[]).forEach(o => {
+    const same = p
+      ? _normPlate(o.carPlate) === p
+      : (custName && carName && (o.custName||'').trim()===custName && (o.carName||'').trim()===carName);
+    if (!same) return;
+    const diff = _daysBetween(_orderBaseDate(o), base);
+    if (diff <= DUP_CHECK_DAYS && diff < bestDiff) { best = o; bestDiff = diff; }
+  });
+  return best;
+}
+function confirmIfDuplicate(plate, custName, carName, dateIn) {
+  const dup = findRecentDuplicate(plate, custName, carName, dateIn);
+  if (!dup) return true;
+  return confirm(`⚠️ 同じ${plate?'車番':'顧客名・車名'}の指示書が近い日付にあります。\n\n${dup.orderNum||'（番号なし）'}　${dup.custName||''}　${dup.carName||''}${dup.carPlate?'【'+dup.carPlate+'】':''}\n入庫日：${dup.dateIn||'未設定'}　ステータス：${dup.status||'未設定'}\n\nこのまま新しく保存すると、2件に分かれてしまいます。\n本当にこのまま新規保存しますか？`);
+}
+
 // ─── 保存：一般修理 ───────────────────────────────────────────
 async function saveRepair() {
   if (isSaving) return;
@@ -997,17 +1217,9 @@ async function saveRepair() {
   const carName  = document.getElementById('r-carName').value.trim();
   if (!custName && !carName) { showToast('顧客名か車名を入力してください', 'error'); return; }
 
-  // 二重作成の防止：同じ車番、または同じ顧客名＋車名の指示書が既にないか確認する
+  // 二重作成の防止：入庫日が近い（前後14日以内）同じ車番の指示書だけを確認する
   const carPlateVal = document.getElementById('r-carPlate').value.trim();
-  const dup = S.orders.find(o => {
-    if (carPlateVal && (o.carPlate||'').trim() === carPlateVal) return true;
-    if (!carPlateVal && custName && carName && (o.custName||'').trim()===custName && (o.carName||'').trim()===carName) return true;
-    return false;
-  });
-  if (dup) {
-    const ok = confirm(`⚠️ 同じ${carPlateVal?'車番':'顧客名・車名'}の指示書が既にあります。\n\n${dup.orderNum||'（番号なし）'}　${dup.custName||''}　${dup.carName||''}${dup.carPlate?'【'+dup.carPlate+'】':''}\n入庫日：${dup.dateIn||'未設定'}　ステータス：${dup.status||'未設定'}\n\nこのまま新しく保存すると、2件に分かれてしまいます。\n本当にこのまま新規保存しますか？`);
-    if (!ok) return;
-  }
+  if (!confirmIfDuplicate(carPlateVal, custName, carName, document.getElementById('r-dateIn').value)) return;
 
   setSaving('btnSaveRepair', true);
   const preventResults = {};
@@ -1065,6 +1277,7 @@ async function saveRepair() {
 }
 
 function clearRepair() {
+  hidePlateHistory('r-carPlate');
   ['r-custName','r-carName','r-carPlate','r-dateIn','r-dateOut','r-remarks','r-nyukoPlace','r-nyukoTime'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
   });
@@ -1088,6 +1301,7 @@ async function saveAccident() {
   const custName = document.getElementById('ac-custName').value.trim();
   const carName  = document.getElementById('ac-carName').value.trim();
   if (!custName && !carName) { showToast('顧客名か車名を入力してください', 'error'); return; }
+  if (!confirmIfDuplicate(document.getElementById('ac-carPlate').value.trim(), custName, carName, document.getElementById('ac-dateIn').value)) return;
   setSaving('btnSaveAccident', true);
   const insurance = document.getElementById('ac-insurance').value || document.getElementById('ac-insuranceDirect').value.trim();
   const orderNum  = await genOrderNum();
@@ -1114,6 +1328,7 @@ async function saveAccident() {
 }
 
 function clearAccident() {
+  hidePlateHistory('ac-carPlate');
   ['ac-custName','ac-carName','ac-carPlate','ac-dateIn','ac-dateOut','ac-remarks','ac-insuranceDirect'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
   });
@@ -1132,6 +1347,7 @@ async function saveShakken() {
   const custName = document.getElementById('sk-custName').value.trim();
   const carName  = document.getElementById('sk-carName').value.trim();
   if (!custName && !carName) { showToast('顧客名か車名を入力してください','error'); return; }
+  if (!confirmIfDuplicate(document.getElementById('sk-carPlate')?.value.trim()||'', custName, carName, document.getElementById('sk-dateIn')?.value||'')) return;
   setSaving('btnSaveShakken', true);
   const skResults = {};
   if (skType==='truck') {
@@ -1167,6 +1383,7 @@ async function saveShakken() {
 }
 
 function clearShakken() {
+  hidePlateHistory('sk-carPlate');
   ['sk-custName','sk-carName','sk-carPlate','sk-dateIn','sk-dateOut','sk-remarks','sk-nyukoPlace','sk-nyukoTime'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
   });
@@ -1259,6 +1476,45 @@ function inMonthOrCarryover(o, filterMonth){
   if(o.status!=='完了' && o.status!=='引渡済') return true;
   return false;
 }
+// ─── 引渡済なのに請求書がまだの件数 ───────────────────────────
+var _dniCache = { t: 0, n: null };
+async function countDeliveredUninvoiced() {
+  if (_dniCache.n !== null && Date.now() - _dniCache.t < 60000) return _dniCache.n;
+  let n = null;
+  if (sb && sbReady) {
+    try {
+      // 前の月の引渡済は一覧に読み込まれていないことがあるので、サーバーで数える
+      const { data, error } = await sb.from(DB_TABLES.KIROKU).select('id,progress')
+        .eq('status', '引渡済').or('invoice_done.is.null,invoice_done.eq.false');
+      if (!error) n = (data||[]).filter(r => !(r.progress||[]).includes('請求書済')).length;
+    } catch(e) {}
+  }
+  if (n === null) n = (S.orders||[]).filter(o => o.status === '引渡済' && !_isInvoiced(o)).length;
+  _dniCache = { t: Date.now(), n };
+  return n;
+}
+function showDeliveredUninvoiced(on) {
+  const sel = document.getElementById('filterExtra'); if (!sel) return;
+  sel.value = on ? 'deliveredNoInvoice' : '';
+  loadList();
+}
+async function renderDniBanner(c, active) {
+  let el = document.getElementById('dniBanner');
+  if (!el) { el = document.createElement('div'); el.id = 'dniBanner'; c.parentNode.insertBefore(el, c); }
+  const n = await countDeliveredUninvoiced();
+  if (active) {
+    el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding:12px 14px;background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px">
+      <span style="font-size:15px;font-weight:700;color:#991b1b">🚨 引渡済・請求書未を表示中（${n}件）</span>
+      <button onclick="showDeliveredUninvoiced(false)" style="background:#fff;border:1.5px solid #fca5a5;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:700;color:#991b1b;cursor:pointer;white-space:nowrap">解除</button></div>`;
+  } else if (n > 0) {
+    el.innerHTML = `<div onclick="showDeliveredUninvoiced(true)" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding:12px 14px;background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;cursor:pointer">
+      <span style="font-size:15px;font-weight:700;color:#991b1b">🚨 引渡済なのに請求書がまだ：${n}件</span>
+      <span style="background:#dc2626;color:#fff;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:700;white-space:nowrap">確認する</span></div>`;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
 async function loadList(forceLoadAll) {
   const c=document.getElementById('orderList');
   c.innerHTML='<div class="loading"><span class="spinner"></span></div>';
@@ -1266,8 +1522,9 @@ async function loadList(forceLoadAll) {
   await flushPendingWrites();
   const filterMonth0  =document.getElementById('filterMonth')?.value;
   const filterKeyword0=document.getElementById('filterKeyword')?.value.trim();
+  const isDni = document.getElementById('filterExtra')?.value==='deliveredNoInvoice';
   if (sbReady && !_allMonthsLoaded) {
-    if (filterKeyword0 || forceLoadAll) {
+    if (filterKeyword0 || forceLoadAll || isDni) {
       // 検索キーワードがある場合・全件ボタン押下時は全月対象
       const sbOrders = await sbLoadOrders(true);
       if (sbOrders !== null) { S.orders = sbOrders; _allMonthsLoaded = true; }
@@ -1297,7 +1554,9 @@ async function loadList(forceLoadAll) {
   updateMonthFilter();
   let orders=[...S.orders];
   // キーワード検索中は「全期間から探す」のが目的なので、月の絞り込みは適用しない
-  if(!filterKeyword) orders=orders.filter(o=>inMonthOrCarryover(o,filterMonth));
+  if(!filterKeyword && !isDni) orders=orders.filter(o=>inMonthOrCarryover(o,filterMonth));
+  if(isDni) orders=orders.filter(o=>o.status==='引渡済' && !_isInvoiced(o));
+  renderDniBanner(c, isDni);
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
   const filterExtra = document.getElementById('filterExtra')?.value;
@@ -1351,7 +1610,7 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.16`;
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.19`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
@@ -1391,10 +1650,10 @@ async function loadList(forceLoadAll) {
   const _tomorrowWeekday=weekdays[new Date(`${_tomorrow}T12:00:00Z`).getDay()];
 
   function renderOrderCard(o) {
-    const subNames=(o.subStaff||[]).map(s=>s.name).join('・');
-    const nyukoInfo=[o.nyukoMethod||'',o.nyukoPlace?`📍${o.nyukoPlace}`:'',o.nyukoTime?`⏰${o.nyukoTime}`:''].filter(Boolean).join('　');
+    const subNames=esc((o.subStaff||[]).map(s=>s.name).join('・'));
+    const nyukoInfo=esc([o.nyukoMethod||'',o.nyukoPlace?`📍${o.nyukoPlace}`:'',o.nyukoTime?`⏰${o.nyukoTime}`:''].filter(Boolean).join('　'));
     const allItems=[...(o.carItems||[]),...(o.truckItems||[]),...(o.airconItems||[]),...(o.skResults?Object.keys(o.skResults).filter(k=>o.skResults[k]):[])].slice(0,3);
-    const itemsPreview=allItems.length?`<div style="font-size:14px;color:#f97316;margin-top:4px;">🔧 ${allItems.join('・')}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>`:'';
+    const itemsPreview=allItems.length?`<div style="font-size:14px;color:#f97316;margin-top:4px;">🔧 ${esc(allItems.join('・'))}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>`:'';
     const isPast=(o.dateIn||'')!==''&&(o.dateIn||'')<_today&&o.status!=='引渡済';
     const isUntaken=o.status==='入庫待ち'&&!o.mechName;
     const bookmarkBadge=o.bookmarked?`<span style="color:#7e22ce;font-size:14px;">⭐</span>`:'';
@@ -1404,7 +1663,7 @@ async function loadList(forceLoadAll) {
     const alertMark=isPast?'⚠ ':'';
     const cardBorder=o.status==='作業中'?'2px solid #ef4444':isPast?'2px solid #f97316':'1.5px solid var(--border)';
     // 備考1行目
-    const remarksPreview=o.remarks?(()=>{const first=o.remarks.trim().split('\n')[0];return first?`<div style="font-size:13px;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📝 ${first}</div>`:''})():'';
+    const remarksPreview=o.remarks?(()=>{const first=o.remarks.trim().split('\n')[0];return first?`<div style="font-size:13px;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📝 ${esc(first)}</div>`:''})():'';
     // ステータスボタン4つ
     const statuses=[['入庫待ち','入庫待ち','#f97316'],['作業中','作業中','#ef4444'],['作業完了','完了','#8b5cf6'],['引渡済','引渡済','#64748b']];
     const statusBtns=statuses.map(([label,val,c])=>`<button onclick="quickStatus('${o.id}','${val}');return false;" style="flex:1;padding:10px 4px;font-size:13px;font-weight:700;background:${o.status===val?c:'#f8fafc'};color:${o.status===val?'#fff':'#94a3b8'};border:1.5px solid ${o.status===val?c:'#e2e8f0'};border-radius:10px;cursor:pointer;">${label}</button>`).join('');
@@ -1424,12 +1683,12 @@ async function loadList(forceLoadAll) {
     const takeBtn=isUntaken?`<div onclick="takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
     return `<div class="order-item" onclick="if(!event.target.closest('button'))showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;cursor:pointer;">
       <div class="top">
-        <span class="order-num">${carryBadge}${bookmarkBadge}${rikuunBadge}${alertMark}${o.orderNum||'（番号なし）'}</span>
+        <span class="order-num">${carryBadge}${bookmarkBadge}${rikuunBadge}${alertMark}${esc(o.orderNum||'（番号なし）')}</span>
       </div>
-      <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${o.custName||''}　${o.carName||''}${o.carPlate?'　【'+o.carPlate+'】':''}</div>
+      <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${esc(o.custName)}　${esc(o.carName)}${o.carPlate?'　【'+esc(o.carPlate)+'】':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
         <span>📅 ${o.dateIn||'未設定'}</span>
-        <span>👤 ${o.mechName||'未定'}${subNames?'・'+subNames:''}</span>
+        <span>👤 ${esc(o.mechName||'未定')}${subNames?'・'+subNames:''}</span>
       </div>
       ${nyukoInfo?`<div style="color:#1d4ed8;font-size:15px;font-weight:600;margin-top:6px;">🚗 ${nyukoInfo}</div>`:''}
       ${itemsPreview}
@@ -1501,10 +1760,40 @@ async function loadList(forceLoadAll) {
 
 // ─── 作業引き受け ────────────────────────────────────────────
 
+// ─── 「元に戻す」付きのお知らせ ───────────────────────────────
+let _undoTimer = null;
+function showUndoToast(msg, undoFn, ms = 6000) {
+  hideToast();
+  document.getElementById('undoToast')?.remove();
+  clearTimeout(_undoTimer);
+  const t = document.createElement('div');
+  t.id = 'undoToast';
+  t.style.cssText = 'position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:3000;display:flex;align-items:center;gap:12px;background:#1e2433;color:#fff;border-radius:12px;padding:12px 12px 12px 16px;box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:15px;font-weight:600;width:max-content;max-width:calc(100% - 24px)';
+  const span = document.createElement('span'); span.textContent = msg;
+  const btn = document.createElement('button');
+  btn.textContent = '↩ 元に戻す';
+  btn.style.cssText = 'background:#f97316;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap';
+  btn.onclick = () => { clearTimeout(_undoTimer); t.remove(); undoFn(); };
+  t.append(span, btn);
+  document.body.appendChild(t);
+  _undoTimer = setTimeout(() => t.remove(), ms);
+}
+async function revertStatus(orderId, prevStatus, prevCompletedAt) {
+  const order = S.orders.find(o => o.id === orderId); if (!order) return;
+  order.status = prevStatus;
+  order.completedAt = prevCompletedAt || '';
+  saveState();
+  const ok = sb ? await sbWrite(DB_TABLES.KIROKU, 'update', { status: prevStatus, completed_at: prevCompletedAt || null }, orderId) : true;
+  showToast(ok ? `↩ 「${prevStatus}」に戻しました` : '⚠️ 通信失敗。自動で再送信します', ok ? 'success' : 'error');
+  loadList();
+}
+
 // ─── 一覧からのクイック操作 ──────────────────────────────────
 async function quickStatus(orderId, newStatus) {
   const order = S.orders.find(o => o.id === orderId);
   if (!order) return;
+  if (order.status === newStatus) return; // 同じボタンをもう一度押しても何もしない
+  const prevStatus = order.status, prevCompletedAt = order.completedAt || '';
   // 処理中表示（通信が遅い時も「動いている」とわかるように）
   document.querySelectorAll(`button[onclick*="quickStatus('${orderId}','${newStatus}')"]`).forEach(btn => {
     btn.dataset.origText = btn.textContent;
@@ -1522,7 +1811,8 @@ async function quickStatus(orderId, newStatus) {
   if (sb) {
     statusOk = await sbWrite(DB_TABLES.KIROKU, 'update', updatePayload, orderId);
   }
-  showToast(statusOk ? `✅ ステータスを「${newStatus}」に変更しました` : `⚠️ 通信失敗。自動で再送信します（表示は「${newStatus}」のまま）`, statusOk ? 'success' : 'error');
+  if (statusOk) showUndoToast(`「${newStatus}」に変更しました`, () => revertStatus(orderId, prevStatus, prevCompletedAt));
+  else showToast(`⚠️ 通信失敗。自動で再送信します（表示は「${newStatus}」のまま）`, 'error');
   // ステータスボタンの見た目だけ即時更新（全件再読み込みしない）
   const statusMeta = [['入庫待ち','入庫待ち','#f97316'],['作業中','作業中','#ef4444'],['作業完了','完了','#8b5cf6'],['引渡済','引渡済','#64748b']];
   document.querySelectorAll(`button[onclick*="quickStatus('${orderId}'"]`).forEach(btn => {
@@ -1541,7 +1831,7 @@ async function quickStatus(orderId, newStatus) {
   });
 }
 
-async function quickProgress(orderId, key) {
+async function quickProgress(orderId, key, _isUndo) {
   const order = S.orders.find(o => o.id === orderId);
   if (!order) return;
   // 処理中表示（通信が遅い時も「動いている」とわかるように）
@@ -1554,7 +1844,10 @@ async function quickProgress(orderId, key) {
   const has = order.progress.includes(key);
   if (has) { order.progress = order.progress.filter(k => k !== key); }
   else { order.progress.push(key); }
+  // 「請求書済」は請求書チェックとそろえる（片方だけだと件数がずれるため）
+  if (key === '請求書済') order.invoiceDone = !has;
   saveState();
+  if (!_isUndo) showUndoToast(`「${key}」を${has ? '外しました' : '付けました'}`, () => quickProgress(orderId, key, true));
   // Supabase保存完了後にloadList
   if (sb) {
     try { await sbSaveOrder(order); } catch(e) { console.log('progress保存エラー:', e); }
@@ -1601,7 +1894,7 @@ function shijishoField(label,value) {
   if(!value) return '';
   return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
     <div style="font-size:11px;color:var(--sub);font-weight:700;margin-bottom:6px">${label}</div>
-    <div style="font-size:17px;font-weight:700;color:var(--text)">${value}</div>
+    <div style="font-size:17px;font-weight:700;color:var(--text)">${esc(value)}</div>
   </div>`;
 }
 function shijishoSection(title,content) {
@@ -1609,7 +1902,7 @@ function shijishoSection(title,content) {
     <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">${title}</div>${content}</div>`;
 }
 function tagList(items,color) {
-  return `<div style="display:flex;flex-wrap:wrap;gap:6px">${items.map(i=>`<span style="background:rgba(240,160,48,0.15);border:1px solid ${color};border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:${color}">${i}</span>`).join('')}</div>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px">${items.map(i=>`<span style="background:rgba(240,160,48,0.15);border:1px solid ${color};border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:${color}">${esc(i)}</span>`).join('')}</div>`;
 }
 
 async function buildPhotoSectionAsync(orderId) {
@@ -1624,11 +1917,11 @@ async function buildPhotoSectionAsync(orderId) {
   const imgs=allPhotos.map((p,i)=>`
     <div id="photo-slot-view-${i}">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-        <input type="checkbox" id="photo-check-${i}" data-b64="${p.photo_b64}" data-type="${p.photo_type}" data-id="${p.id||''}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">
-        <span style="color:var(--sub);font-size:11px;font-weight:700">${p.photo_type}</span>
+        <input type="checkbox" id="photo-check-${i}" data-src="${esc(_photoSrc(p))}" data-type="${esc(p.photo_type)}" data-id="${p.id||''}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">
+        <span style="color:var(--sub);font-size:11px;font-weight:700">${esc(p.photo_type)}</span>
         <button onclick="deletePhoto('${p.id||''}','photo-slot-view-${i}')" style="margin-left:auto;background:var(--danger);border:none;border-radius:6px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer">🗑️</button>
       </div>
-      <img src="${p.photo_b64}" data-pid="${p.id||''}" data-ptype="${p.photo_type}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen(this.src,this.dataset.ptype,this.dataset.pid)">
+      <img src="${esc(_photoSrc(p))}" loading="lazy" data-url="${esc(p.photo_url||'')}" data-pid="${p.id||''}" data-ptype="${esc(p.photo_type)}" style="width:100%;border-radius:10px;border:2px solid var(--border);cursor:zoom-in" onclick="openPhotoFullscreen(this.src,this.dataset.ptype,this.dataset.pid)">
     </div>`).join('');
   ph.outerHTML = shijishoSection('📷 写真',`
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -1644,7 +1937,7 @@ function openShijishoView(order) {
   const subNames=(order.subStaff||[]).map(s=>s.name).join('・');
   let sakugyoHtml='';
   if(order.type==='accident') {
-    if(order.insurance) sakugyoHtml+=shijishoSection('🏢 保険会社',`<span style="font-size:16px;font-weight:700">${order.insurance}</span>`);
+    if(order.insurance) sakugyoHtml+=shijishoSection('🏢 保険会社',`<span style="font-size:16px;font-weight:700">${esc(order.insurance)}</span>`);
   } else if(order.type==='shakken'&&order.skResults) {
     const res=Object.entries(order.skResults).filter(([,v])=>v);
     if(res.length) sakugyoHtml+=shijishoSection('🔍 車検点検結果',res.map(([k,v])=>`
@@ -1660,7 +1953,7 @@ function openShijishoView(order) {
     if(prev.length) sakugyoHtml+=shijishoSection('🛡️ 予防整備',prev.map(([k,v])=>`<span style="display:inline-block;margin:3px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;background:${v==='OK'?'rgba(48,176,96,0.2)':'rgba(224,64,64,0.2)'};color:${v==='OK'?'var(--ok)':'var(--danger)'}">${k}：${v}</span>`).join(''));
     if(order.workItems?.length)   sakugyoHtml+=shijishoSection('🔩 作業内容',tagList(order.workItems,'var(--ok)'));
   }
-  if(order.remarks) sakugyoHtml+=shijishoSection('📝 備考・メモ',`<div style="white-space:pre-wrap;font-size:15px;line-height:1.8;background:var(--bg);padding:12px;border-radius:8px">${order.remarks}</div>`);
+  if(order.remarks) sakugyoHtml+=shijishoSection('📝 備考・メモ',`<div style="white-space:pre-wrap;font-size:15px;line-height:1.8;background:var(--bg);padding:12px;border-radius:8px">${esc(order.remarks)}</div>`);
 
   let photoHtml='<div id="photo-section-placeholder"></div>';
   buildPhotoSectionAsync(order.id);
@@ -1674,11 +1967,11 @@ function openShijishoView(order) {
     <div style="position:sticky;top:0;background:var(--card);border-bottom:2px solid var(--accent);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;z-index:10;flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-size:11px;color:var(--sub);font-weight:700">${typeLabel}</div>
-        <div style="font-size:20px;font-weight:800;color:var(--accent)">${order.orderNum||'番号なし'}</div>
+        <div style="font-size:20px;font-weight:800;color:var(--accent)">${esc(order.orderNum||'番号なし')}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button onclick="toggleBookmark('${order.id}')" style="background:${order.bookmarked?'#f3e8ff':'#f8fafc'};border:1.5px solid ${order.bookmarked?'#7e22ce':'var(--border)'};border-radius:10px;padding:10px 14px;font-size:18px;cursor:pointer;">${order.bookmarked?'⭐':'☆'}</button>
-        <button onclick="if(confirm('この指示書を削除しますか？')){deleteOrder('${order.id}');closeShijishoView();loadList();}" style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 14px;font-size:18px;cursor:pointer;">🗑️</button>
+        <button onclick="if(deleteOrder('${order.id}')){closeShijishoView();loadList();}" style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:10px 14px;font-size:18px;cursor:pointer;">🗑️</button>
         <button onclick="openEditModal('${order.id}')" style="flex:1;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:700;color:#1d4ed8;cursor:pointer;">✏️ 編集</button>
         <button onclick="closeShijishoView()" style="background:#f8fafc;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;color:var(--sub);">×</button>
       </div>
@@ -1698,7 +1991,7 @@ function openShijishoView(order) {
         <div style="background:#fed7aa;border-radius:99px;height:8px;overflow:hidden">
           <div style="background:#f97316;width:${pct}%;height:100%;border-radius:99px"></div>
         </div>
-      </div>`:'<div id="invoiceBanner" style="padding:8px 16px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;font-size:12px;font-weight:700;color:#15803d">✅ ${monthLabel}の請求書はすべて完了しています</div>';
+      </div>`:`<div id="invoiceBanner" style="padding:8px 16px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;font-size:12px;font-weight:700;color:#15803d">✅ ${monthLabel}の請求書はすべて完了しています</div>`;
     })()}
     <div style="max-width:900px;margin:0 auto;padding:16px">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
@@ -1716,6 +2009,9 @@ function openShijishoView(order) {
         <button id="invoiceBtn_${order.id}" onclick="toggleInvoiceDoneDetail('${order.id}')" style="width:100%;padding:12px;border-radius:10px;border:2px solid ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#7e22ce':'#d1d5db'};background:${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#f3e8ff':'#f8fafc'};font-size:15px;font-weight:700;color:${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#7e22ce':'#6b7280'};cursor:pointer">
           ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'✅ 請求書済':'📄 請求書未済（タップで済にする）'}
         </button>
+        ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'':`
+        <button id="invoiceSkipBtn_${order.id}" onclick="skipInvoice('${order.id}')" style="width:100%;margin-top:8px;padding:12px;border-radius:10px;border:1.5px solid #d1d5db;background:#fff;font-size:15px;font-weight:700;color:#475569;cursor:pointer">⏭ まだ作れない → 後回しにして次へ</button>`}
+        ${_invoiceSkipped.size?`<div style="margin-top:8px;font-size:12px;color:#64748b;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>後回し中：${_invoiceSkipped.size}件</span><button onclick="resetInvoiceSkips()" style="background:none;border:none;color:#7e22ce;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline">後回しを解除</button></div>`:''}
       </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
         <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📷 写真を追加</div>
@@ -1757,7 +2053,7 @@ function addPhotoToOrder(orderId,containerId,type) {
         div.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px">${type}</div><img src="${compressed}" style="width:100%;border-radius:6px"><div style="color:var(--sub);font-size:10px;margin-top:3px;text-align:center">保存中...</div>`;
         if(container) container.appendChild(div);
         if(sb){
-          const rows=[{kiroku_id:orderId,photo_type:type,photo_b64:compressed,memo:''}];
+          const rows=await _buildPhotoRows(orderId,[{type,dataUrl:compressed}]);
           const ok=await sbWrite(DB_TABLES.PHOTOS,'insert',rows,null);
           const s=div.querySelector('div:last-child');
           if(ok){ if(s){s.textContent='✅ 保存完了'; s.style.color='var(--ok)'; s.style.fontWeight='700';} }
@@ -1824,7 +2120,9 @@ function openPhotoFullscreen(src, type, photoId) {
   const imgWrap = document.createElement('div');
   imgWrap.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%';
   const imgEl = document.createElement('img');
-  imgEl.id = 'fsPhoto'; imgEl.src = src;
+  imgEl.id = 'fsPhoto';
+  if (/^https?:/.test(src)) imgEl.crossOrigin = 'anonymous'; // 回転保存のため
+  imgEl.src = src;
   imgEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center';
   imgWrap.appendChild(imgEl);
   div.appendChild(btnArea); div.appendChild(imgWrap);
@@ -1850,12 +2148,20 @@ async function saveFsPhoto() {
   const ctx = canvas.getContext('2d');
   ctx.translate(cw/2, ch/2); ctx.rotate(rad);
   ctx.drawImage(img, -sw/2, -sh/2);
-  const newSrc = canvas.toDataURL('image/jpeg', 0.85);
+  let newSrc;
+  try { newSrc = canvas.toDataURL('image/jpeg', 0.85); }
+  catch(e) { showToast('⚠️ この写真は回転保存できません', 'error'); closePhotoFullscreen(); return; }
   if (sb && _fsPhotoId) {
-    const ok = await sbWrite(DB_TABLES.PHOTOS, 'update', { photo_b64: newSrc }, _fsPhotoId);
+    const oldUrl = /^https?:/.test(img.src) ? img.src : '';
+    const newUrl = await _uploadPhotoToStorage(currentOrder?.id || 'rotated', newSrc);
+    const payload = newUrl ? { photo_url: newUrl, photo_b64: '' } : { photo_b64: newSrc };
+    const ok = await sbWrite(DB_TABLES.PHOTOS, 'update', payload, _fsPhotoId);
     if (ok) {
       showToast('✅ 保存しました', 'success');
-      document.querySelectorAll('img').forEach(el => { if (el.src === img.src) el.src = newSrc; });
+      const shown = newUrl || newSrc;
+      document.querySelectorAll('img').forEach(el => { if (el.src === img.src && el !== img) { el.src = shown; el.dataset.url = newUrl || ''; } });
+      const oldPath = newUrl ? _storagePathFromUrl(oldUrl) : '';
+      if (oldPath) { try { await sb.storage.from(PHOTO_BUCKET).remove([oldPath]); } catch(e) {} }
     } else {
       showToast('⚠️ 通信失敗。自動で再送信します', 'error');
     }
@@ -1873,13 +2179,13 @@ function openManageModal(id) {
   document.body.insertAdjacentHTML('beforeend',`
   <div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px" id="manageModal">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:400px">
-      <div style="color:var(--accent);font-size:16px;font-weight:800;margin-bottom:16px">⚙️ 管理 - ${order.orderNum||''}</div>
+      <div style="color:var(--accent);font-size:16px;font-weight:800;margin-bottom:16px">⚙️ 管理 - ${esc(order.orderNum)}</div>
       <div style="color:var(--sub);font-size:12px;font-weight:700;margin-bottom:8px">ステータス変更</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
         ${['入庫待ち','入庫中','作業中','完了','引渡済','車検中'].map(s=>`<button class="btn btn-sm${order.status===s?' btn-primary':' btn-gray'}" onclick="changeStatus('${id}','${s}');closeManageModal()">${s}</button>`).join('')}
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteOrder('${id}');closeManageModal();closeShijishoView();loadList()">🗑️ 削除</button>
+        <button class="btn btn-danger btn-sm" style="flex:1" onclick="if(deleteOrder('${id}')){closeManageModal();closeShijishoView();loadList();}">🗑️ 削除</button>
         <button class="btn btn-gray btn-sm" style="flex:1" onclick="closeManageModal()">キャンセル</button>
       </div>
     </div>
@@ -1942,7 +2248,7 @@ function openEditModal(id) {
   document.body.insertAdjacentHTML('beforeend', `
   <div style="position:fixed;inset:0;background:var(--bg);z-index:700;overflow-y:auto" id="editModal">
     <div style="position:sticky;top:0;background:var(--card);border-bottom:2px solid var(--accent);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;z-index:10;gap:8px">
-      <div style="font-size:16px;font-weight:800;color:var(--accent)">✏️ 編集 - ${order.orderNum||''}</div>
+      <div style="font-size:16px;font-weight:800;color:var(--accent)">✏️ 編集 - ${esc(order.orderNum)}</div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary btn-sm" onclick="saveEdit()">💾 保存</button>
         <button class="btn btn-gray btn-sm" onclick="closeEditModal()">✕</button>
@@ -1956,15 +2262,15 @@ function openEditModal(id) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">顧客名</div>
-            <input id="edit-custName" value="${order.custName||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+            <input id="edit-custName" value="${esc(order.custName)}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">車名</div>
-            <input id="edit-carName" value="${order.carName||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+            <input id="edit-carName" value="${esc(order.carName)}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">ナンバー</div>
-            <input id="edit-carPlate" value="${order.carPlate||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+            <input id="edit-carPlate" value="${esc(order.carPlate)}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">入庫日</div>
@@ -1976,7 +2282,7 @@ function openEditModal(id) {
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">担当整備士</div>
-            <input id="edit-mechName" value="${order.mechName||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+            <input id="edit-mechName" value="${esc(order.mechName)}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">ステータス</div>
@@ -1991,7 +2297,7 @@ function openEditModal(id) {
         </div>
         <div style="margin-top:10px">
           <div style="font-size:11px;color:var(--sub);margin-bottom:4px">備考・メモ</div>
-          <textarea id="edit-remarks" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;height:80px">${order.remarks||''}</textarea>
+          <textarea id="edit-remarks" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;height:80px">${esc(order.remarks)}</textarea>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
           <div>
@@ -2011,7 +2317,7 @@ function openEditModal(id) {
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">引き取り場所</div>
-            <input id="edit-nyukoPlace" value="${order.nyukoPlace||''}" placeholder="例：高槻市〇〇町" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+            <input id="edit-nyukoPlace" value="${esc(order.nyukoPlace)}" placeholder="例：高槻市〇〇町" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
           <div style="display:flex;align-items:center;gap:10px;padding-top:20px">
             <div style="font-size:13px;font-weight:700;color:#ff7070">🔴 部品待ち</div>
@@ -2376,7 +2682,7 @@ function closeAddPhotoModal() { document.getElementById('addPhotoModal')?.remove
 async function saveAddedPhotos(orderId) {
   const pending=window._pendingPhotos||{}; const keys=Object.keys(pending);
   if(!keys.length) { showToast('写真を選択してください','error'); return; }
-  const rows = keys.map(k=>({kiroku_id:orderId,photo_type:pending[k].type||'写真',photo_b64:pending[k].dataUrl,memo:''}));
+  const rows = await _buildPhotoRows(orderId, keys.map(k=>({type:pending[k].type||'写真',dataUrl:pending[k].dataUrl})));
   const ok = await sbWrite(DB_TABLES.PHOTOS, 'insert', rows, null);
   if (ok) {
     showToast('写真を保存しました','success');
@@ -2433,23 +2739,67 @@ async function toggleInvoiceDoneDetail(id) {
   showToast(done?'📄 請求書済にしました':'📄 請求書未に戻しました','success');
   loadList();
   if(wasNotDone && done){
-    const nextOrder=(S.orders||[])
-      .filter(o=>o.id!==id)
-      .filter(o=>inMonthOrCarryover(o,filterMonth))
-      .filter(o=>!o.invoiceDone && !(o.progress||[]).includes('請求書済'))
-      .sort((a,b)=>(a.dateIn||a.savedAt||'').localeCompare(b.dateIn||b.savedAt||''))[0];
+    _invoiceSkipped.delete(id);
     closeShijishoView();
-    if(nextOrder){
-      setTimeout(()=>{ showToast(`次: ${nextOrder.orderNum||nextOrder.custName||''}`,'info'); showDetail(nextOrder.id); },350);
-    } else {
-      setTimeout(()=>{ showToast('🎉 未請求の指示書はすべて終わりました','success'); },350);
-    }
+    setTimeout(()=>goNextUninvoiced(id),350);
   }
 }
+
+// ─── 請求書：後回し（スキップ）────────────────────────────────
+// まだ請求書が作れない指示書を一時的に飛ばす。ページを閉じるまで（タブ単位で）覚えておく
+const _invoiceSkipped = new Set(JSON.parse(sessionStorage.getItem('wc_invoice_skipped')||'[]'));
+function _saveInvoiceSkips(){ sessionStorage.setItem('wc_invoice_skipped', JSON.stringify([..._invoiceSkipped])); }
+function _isInvoiced(o){ return o.invoiceDone || (o.progress||[]).includes('請求書済'); }
+function _uninvoicedQueue(){
+  const filterMonth=document.getElementById('filterMonth')?.value||'';
+  const isDni=document.getElementById('filterExtra')?.value==='deliveredNoInvoice';
+  return (S.orders||[])
+    .filter(o=>isDni ? o.status==='引渡済' : inMonthOrCarryover(o,filterMonth))
+    .filter(o=>!_isInvoiced(o))
+    .sort((a,b)=>(a.dateIn||a.savedAt||'').localeCompare(b.dateIn||b.savedAt||''));
+}
+function goNextUninvoiced(currentId){
+  const queue=_uninvoicedQueue();
+  const next=queue.find(o=>o.id!==currentId && !_invoiceSkipped.has(o.id));
+  if(next){
+    showToast(`次: ${next.orderNum||next.custName||''}`,'info');
+    showDetail(next.id);
+    return;
+  }
+  const skippedLeft=queue.filter(o=>_invoiceSkipped.has(o.id)).length;
+  if(skippedLeft){
+    if(confirm(`未請求は残り、後回しにした${skippedLeft}件だけです。\nもう一度最初から見ますか？`)){
+      resetInvoiceSkips(true);
+      const first=_uninvoicedQueue()[0];
+      if(first) showDetail(first.id);
+    } else {
+      showToast(`後回し ${skippedLeft}件が残っています`,'info');
+    }
+  } else {
+    showToast('🎉 未請求の指示書はすべて終わりました','success');
+  }
+}
+function skipInvoice(id){
+  _invoiceSkipped.add(id); _saveInvoiceSkips();
+  closeShijishoView();
+  goNextUninvoiced(id);
+}
+function resetInvoiceSkips(silent){
+  _invoiceSkipped.clear(); _saveInvoiceSkips();
+  if(!silent){
+    showToast('後回しを解除しました','info');
+    const v=document.getElementById('shijishoView');
+    if(v && currentOrder){ closeShijishoView(); openShijishoView(currentOrder); }
+  }
+}
+
 async function toggleInvoiceDoneList(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
   order.invoiceDone = !order.invoiceDone;
+  // 「請求書済」の進捗タグも揃える（片方だけ残ると件数がずれるため）
+  order.progress = (order.progress||[]).filter(p=>p!=='請求書済');
+  if (order.invoiceDone) order.progress.push('請求書済');
   saveState();
   await sbSaveOrder(order);
   showToast(order.invoiceDone ? '📄 請求書済にしました' : '📄 請求書未に戻しました', 'success');
@@ -2512,9 +2862,10 @@ function changeStatus(id,status) {
 }
 
 function deleteOrder(id) {
-  if(!confirm('この指示書を削除しますか？')) return;
+  if(!confirm('この指示書を削除しますか？')) return false;
   S.orders=S.orders.filter(o=>o.id!==id); saveState(); sbDeleteOrder(id);
   showToast('削除しました','info');
+  return true;
 }
 
 // ─── 全画面入力 ───────────────────────────────────────────────
@@ -2529,7 +2880,7 @@ function openFs(inputId,label) {
 function openFsTextarea(inputId,label) { openFs(inputId,label); }
 function closeFs() {
   const fsVal=document.getElementById('fsInput').value;
-  if(fsTargetId){const el=document.getElementById(fsTargetId);if(el) el.value=fsVal;}
+  if(fsTargetId){const el=document.getElementById(fsTargetId);if(el){ el.value=fsVal; el.dispatchEvent(new Event('change')); }}
   document.getElementById('fsModal').classList.remove('open'); fsTargetId=null;
 }
 
@@ -2624,7 +2975,7 @@ async function renderOwnerPanel() {
           ${staffRanking.map(([name,count],i)=>`
             <tr>
               <td><span class="rank-badge rank-${i+1}">${i+1}</span></td>
-              <td style="font-weight:700">${name}</td>
+              <td style="font-weight:700">${esc(name)}</td>
               <td style="color:var(--accent);font-weight:700">${staffMonthly[name]||0}件</td>
               <td>${count}件</td>
             </tr>`).join('')}
@@ -2640,14 +2991,81 @@ async function renderOwnerPanel() {
           <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
             <span style="font-size:18px">${log.action==='login'?'🔓':'🔒'}</span>
             <div style="flex:1">
-              <div style="font-size:14px;font-weight:700">${log.staff_name}</div>
+              <div style="font-size:14px;font-weight:700">${esc(log.staff_name)}</div>
               <div style="font-size:11px;color:var(--sub)">${log.action==='login'?'ログイン':'ログアウト'}</div>
             </div>
             <div style="font-size:11px;color:var(--sub)">${new Date(log.created_at).toLocaleString('ja-JP')}</div>
           </div>`).join('')}
         ${loginLogs.length===0?'<div style="text-align:center;color:var(--sub);padding:20px">履歴がありません</div>':''}
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📦 写真の保存先を移す（動作を軽くする）</div>
+      <div style="font-size:13px;color:var(--sub);line-height:1.7;margin-bottom:10px">
+        以前の写真はデータベースに直接入っているため、指示書を開く時に重くなります。写真専用の保存場所へ移すと軽くなります。
+        <br>Wi-Fiにつないで実行してください。途中で止まっても、もう一度押せば続きから進みます。
+      </div>
+      <div id="photoMigrateStatus" style="font-size:14px;font-weight:700;margin-bottom:10px">確認中...</div>
+      <button id="photoMigrateBtn" class="btn btn-primary" style="width:100%" onclick="migrateOldPhotos()">📦 古い写真を移す</button>
     </div>`;
+  refreshPhotoMigrateStatus();
+}
+
+async function _countOldPhotos() {
+  const { count, error } = await sb.from(DB_TABLES.PHOTOS).select('id', { count: 'exact', head: true })
+    .is('photo_url', null).neq('photo_b64', '');
+  if (error) throw error;
+  return count || 0;
+}
+async function refreshPhotoMigrateStatus() {
+  const st = document.getElementById('photoMigrateStatus'); if (!st || !sb) return;
+  const btn = document.getElementById('photoMigrateBtn');
+  try {
+    const n = await _countOldPhotos();
+    st.textContent = n ? `移していない写真：${n}枚` : '✅ すべて移し終わっています';
+    if (btn) btn.style.display = n ? '' : 'none';
+  } catch(e) {
+    st.textContent = '⚠️ まだ準備ができていません（Supabase で supabase_setup.sql を実行してください）';
+    if (btn) btn.style.display = 'none';
+  }
+}
+let _migrating = false;
+async function migrateOldPhotos() {
+  if (_migrating || !sb) return;
+  if (!confirm('古い写真を写真専用の保存場所へ移します。\n枚数が多いと数分かかります。始めますか？')) return;
+  _migrating = true;
+  const st = document.getElementById('photoMigrateStatus');
+  const btn = document.getElementById('photoMigrateBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 移しています...（画面を閉じないでください）'; }
+  let moved = 0, failed = 0;
+  try {
+    const total = await _countOldPhotos();
+    while (true) {
+      const { data, error } = await sb.from(DB_TABLES.PHOTOS).select('id,kiroku_id,photo_b64')
+        .is('photo_url', null).neq('photo_b64', '').limit(3);
+      if (error) throw error;
+      const rows = (data||[]).filter(r => (r.photo_b64||'').startsWith('data:'));
+      if (!rows.length) break;
+      for (const r of rows) {
+        const url = await _uploadPhotoToStorage(r.kiroku_id || 'old', r.photo_b64);
+        if (!url) { failed++; continue; }
+        const { error: e2 } = await sb.from(DB_TABLES.PHOTOS).update({ photo_url: url, photo_b64: '' }).eq('id', r.id);
+        if (e2) { failed++; const p = _storagePathFromUrl(url); if (p) await sb.storage.from(PHOTO_BUCKET).remove([p]); continue; }
+        moved++;
+        if (st) st.textContent = `移しています… ${moved} / ${total}枚`;
+      }
+      if (failed >= 5) break; // 通信が不安定な時は止める
+    }
+    showToast(failed ? `⚠️ ${moved}枚移しました（${failed}枚は失敗。もう一度押すと再挑戦します）` : `✅ ${moved}枚の写真を移しました`, failed ? 'error' : 'success', 5000);
+  } catch(e) {
+    console.log('写真移行エラー:', e);
+    showToast(`⚠️ 途中で止まりました（${moved}枚移動済み）。もう一度押すと続きから進みます`, 'error', 5000);
+  } finally {
+    _migrating = false;
+    if (btn) { btn.disabled = false; btn.textContent = '📦 古い写真を移す'; }
+    refreshPhotoMigrateStatus();
+  }
 }
 
 function clearOwnerFilter() {
@@ -2676,6 +3094,7 @@ function initApp() {
   renderMechSelect('mechSelectAccident');
 
   renderSubStaffArea();
+  setupPlateHistory();
 
   setTimeout(()=>loadMasters(), 500);
   setTimeout(()=>{
