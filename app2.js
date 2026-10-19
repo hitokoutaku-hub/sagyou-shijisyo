@@ -1476,6 +1476,25 @@ function inMonthOrCarryover(o, filterMonth){
   if(o.status!=='完了' && o.status!=='引渡済') return true;
   return false;
 }
+// ─── 請求月（請求書を作る月）────────────────────────────────
+// 作業が終わった月で数える。完了日が無いものは入庫日の月
+// （9月に作った指示書でも、10月に作業が終わったなら10月の請求に入る）
+function _invoiceMonthOf(o) {
+  if ((o.status === '完了' || o.status === '引渡済') && o.completedAt) {
+    const d = _isoToJstDateStr(o.completedAt);
+    if (d) return d.slice(0, 7);
+  }
+  if (o.dateIn) return o.dateIn.slice(0, 7);
+  const b = _orderBaseDate(o);
+  return b ? b.slice(0, 7) : '';
+}
+function _isNoInvoiceMode() { return document.getElementById('filterExtra')?.value === 'noInvoice'; }
+// 一覧・請求書バナー・「次へ」で共通に使う月の判定
+function _inSelectedMonth(o, filterMonth) {
+  if (!filterMonth) return true;
+  return _isNoInvoiceMode() ? _invoiceMonthOf(o) === filterMonth : inMonthOrCarryover(o, filterMonth);
+}
+
 // ─── 引渡済なのに請求書がまだの件数 ───────────────────────────
 var _dniCache = { t: 0, n: null };
 async function countDeliveredUninvoiced() {
@@ -1523,8 +1542,9 @@ async function loadList(forceLoadAll) {
   const filterMonth0  =document.getElementById('filterMonth')?.value;
   const filterKeyword0=document.getElementById('filterKeyword')?.value.trim();
   const isDni = document.getElementById('filterExtra')?.value==='deliveredNoInvoice';
+  const isNoInv = _isNoInvoiceMode() && !!filterMonth0;
   if (sbReady && !_allMonthsLoaded) {
-    if (filterKeyword0 || forceLoadAll || isDni) {
+    if (filterKeyword0 || forceLoadAll || isDni || isNoInv) {
       // 検索キーワードがある場合・全件ボタン押下時は全月対象
       const sbOrders = await sbLoadOrders(true);
       if (sbOrders !== null) { S.orders = sbOrders; _allMonthsLoaded = true; }
@@ -1554,7 +1574,7 @@ async function loadList(forceLoadAll) {
   updateMonthFilter();
   let orders=[...S.orders];
   // キーワード検索中は「全期間から探す」のが目的なので、月の絞り込みは適用しない
-  if(!filterKeyword && !isDni) orders=orders.filter(o=>inMonthOrCarryover(o,filterMonth));
+  if(!filterKeyword && !isDni) orders=orders.filter(o=>_inSelectedMonth(o,filterMonth));
   if(isDni) orders=orders.filter(o=>o.status==='引渡済' && !_isInvoiced(o));
   renderDniBanner(c, isDni);
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
@@ -1610,7 +1630,7 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.19`;
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.20`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
@@ -1687,7 +1707,7 @@ async function loadList(forceLoadAll) {
       </div>
       <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${esc(o.custName)}　${esc(o.carName)}${o.carPlate?'　【'+esc(o.carPlate)+'】':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
-        <span>📅 ${o.dateIn||'未設定'}</span>
+        <span>📅 ${o.dateIn||'未設定'}</span>${(o.status==='完了'||o.status==='引渡済')&&o.completedAt?`<span>✅ 完了 ${_isoToJstDateStr(o.completedAt).slice(5).replace('-','/')}</span>`:''}
         <span>👤 ${esc(o.mechName||'未定')}${subNames?'・'+subNames:''}</span>
       </div>
       ${nyukoInfo?`<div style="color:#1d4ed8;font-size:15px;font-weight:600;margin-top:6px;">🚗 ${nyukoInfo}</div>`:''}
@@ -1978,7 +1998,7 @@ function openShijishoView(order) {
     </div>
     ${(()=>{
       const filterMonth=document.getElementById('filterMonth')?.value||'';
-      const all=(S.orders||[]).filter(o=>inMonthOrCarryover(o,filterMonth));
+      const all=(S.orders||[]).filter(o=>_inSelectedMonth(o,filterMonth));
       const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
       const total=all.length;
       const done=total-uninvoiced;
@@ -2718,7 +2738,7 @@ async function toggleInvoiceDoneDetail(id) {
   }
   // バナーを再描画
   const filterMonth=document.getElementById('filterMonth')?.value||'';
-  const all=(S.orders||[]).filter(o=>inMonthOrCarryover(o,filterMonth));
+  const all=(S.orders||[]).filter(o=>_inSelectedMonth(o,filterMonth));
   const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
   const total=all.length; const doneCount=total-uninvoiced;
   const pct=total?Math.round(doneCount/total*100):0;
@@ -2754,7 +2774,7 @@ function _uninvoicedQueue(){
   const filterMonth=document.getElementById('filterMonth')?.value||'';
   const isDni=document.getElementById('filterExtra')?.value==='deliveredNoInvoice';
   return (S.orders||[])
-    .filter(o=>isDni ? o.status==='引渡済' : inMonthOrCarryover(o,filterMonth))
+    .filter(o=>isDni ? o.status==='引渡済' : _inSelectedMonth(o,filterMonth))
     .filter(o=>!_isInvoiced(o))
     .sort((a,b)=>(a.dateIn||a.savedAt||'').localeCompare(b.dateIn||b.savedAt||''));
 }
@@ -3120,7 +3140,8 @@ initAuth();
 setInterval(()=>{
   // 一覧画面を見ている時だけ、他のスタッフの更新を軽く取り直す（3分に1回、負荷を抑えるため間隔は長め）
   const listPanel=document.getElementById('panel-list');
-  if(listPanel && listPanel.classList.contains('active') && sbReady && !document.getElementById('shijishoView')){
+  const editing = document.getElementById('shijishoView') || document.getElementById('editModal') || document.getElementById('manageModal') || document.getElementById('undoToast');
+  if(listPanel && listPanel.classList.contains('active') && sbReady && !editing){
     loadList();
   }
 }, 180000);
