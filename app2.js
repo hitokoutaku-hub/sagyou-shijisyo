@@ -1503,12 +1503,12 @@ async function countDeliveredUninvoiced() {
   if (sb && sbReady) {
     try {
       // 前の月の引渡済は一覧に読み込まれていないことがあるので、サーバーで数える
-      const { data, error } = await sb.from(DB_TABLES.KIROKU).select('id,progress')
-        .eq('status', '引渡済').or('invoice_done.is.null,invoice_done.eq.false');
-      if (!error) n = (data||[]).filter(r => !(r.progress||[]).includes('請求書済')).length;
+      const { data, error } = await sb.from(DB_TABLES.KIROKU).select('id,progress,invoice_done')
+        .eq('status', '引渡済');
+      if (!error) n = (data||[]).filter(r => _needsInvoice({ invoiceDone: !!r.invoice_done, progress: r.progress||[] })).length;
     } catch(e) {}
   }
-  if (n === null) n = (S.orders||[]).filter(o => o.status === '引渡済' && !_isInvoiced(o)).length;
+  if (n === null) n = (S.orders||[]).filter(o => o.status === '引渡済' && _needsInvoice(o)).length;
   _dniCache = { t: Date.now(), n };
   return n;
 }
@@ -1575,13 +1575,13 @@ async function loadList(forceLoadAll) {
   let orders=[...S.orders];
   // キーワード検索中は「全期間から探す」のが目的なので、月の絞り込みは適用しない
   if(!filterKeyword && !isDni) orders=orders.filter(o=>_inSelectedMonth(o,filterMonth));
-  if(isDni) orders=orders.filter(o=>o.status==='引渡済' && !_isInvoiced(o));
+  if(isDni) orders=orders.filter(o=>o.status==='引渡済' && _needsInvoice(o));
   renderDniBanner(c, isDni);
   if(filterStatus)  orders=orders.filter(o=>o.status===filterStatus);
   if(filterType)    orders=orders.filter(o=>o.type===filterType);
   const filterExtra = document.getElementById('filterExtra')?.value;
   if(filterExtra==='bookmark') orders=orders.filter(o=>o.bookmarked);
-  if(filterExtra==='noInvoice') orders=orders.filter(o=>!o.invoiceDone && !(o.progress||[]).includes('請求書済'));
+  if(filterExtra==='noInvoice') orders=orders.filter(o=>_needsInvoice(o));
   if(filterExtra==='carryover') orders=orders.filter(o=>{
     const d=o.dateIn||'';
     return d && d<_curYM() && o.status!=='完了' && o.status!=='引渡済';
@@ -1630,7 +1630,7 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.20`;
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.21`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
@@ -1641,16 +1641,18 @@ async function loadList(forceLoadAll) {
   })();
   if(filterExtraVal==='noInvoice'||filterExtraVal==='noRecord'){
     const label=filterExtraVal==='noInvoice'?'請求書済':'3ヵ月点検済';
-    const allOrders=S.orders||[];
+    // 選んでいる月の分だけで数える（キーワード検索中は全期間）
+    const allOrders=(S.orders||[]).filter(o=>filterKeyword||_inSelectedMonth(o,filterMonth));
     const total=allOrders.length;
+    const periodLabel=(!filterKeyword&&filterMonth)?`${filterMonth.replace('-','年')}月 `:'全期間 ';
     const doneCount=filterExtraVal==='noInvoice'
-      ? allOrders.filter(o=>o.invoiceDone||(o.progress||[]).includes('請求書済')).length
+      ? allOrders.filter(o=>!_needsInvoice(o)).length
       : allOrders.filter(o=>(o.progress||[]).includes('3ヵ月点検記録簿済')).length;
     const pct=total?Math.round(doneCount/total*100):0;
     progressBarEl.style.display='block';
     progressBarEl.innerHTML=`
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:13px;font-weight:700;color:#374151">
-        <span>📄 ${label} ${doneCount}/${total}件</span>
+        <span>📄 ${periodLabel}${label} ${doneCount}/${total}件</span>
         <span style="color:${pct===100?'#16a34a':'#f97316'}">残り${total-doneCount}件 ${pct}%</span>
       </div>
       <div style="background:#e5e7eb;border-radius:99px;height:12px;overflow:hidden">
@@ -1690,7 +1692,9 @@ async function loadList(forceLoadAll) {
     // 進捗ボタン6つ
     const progressDef=[['📦','部品発注済','#fef9c3','#854d0e'],['⏳','部品待ち','#fef2f2','#991b1b'],['✅','点検完了','#dcfce7','#15803d'],['📘','3ヵ月点検記録簿済','#dbeafe','#1d4ed8'],['🚙','納車準備OK','#f0fdf4','#166534'],['📄','請求書済','#f3e8ff','#7e22ce']];
     const prog=o.progress||[];
-    const progressBtns=progressDef.map(([icon,key,bg,color])=>`<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
+    const progressBtns=progressDef.map(([icon,key,bg,color])=>(key==='請求書済' && _invoiceMismatch(o))
+      ? `<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:#fff7ed;color:#c2410c;border:1.5px dashed #f97316;border-radius:10px;cursor:pointer;">⚠️ 請求書 要確認</button>`
+      : `<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
     // 車検専用：陸運局まわりの進捗ボタン（車検の指示書のみ表示）
     const shakkenProgressDef=[['🏢','先に陸運局','#e0f2fe','#0369a1'],['✅','陸運局回送済','#dcfce7','#166534']];
     const shakkenProgressBtns=o.type==='shakken'?`<div style="margin-top:8px;">
@@ -1780,6 +1784,19 @@ async function loadList(forceLoadAll) {
 
 // ─── 作業引き受け ────────────────────────────────────────────
 
+// ─── 一覧の「請求書済」ボタン ────────────────────────────────
+async function quickInvoice(order, _isUndo) {
+  const prevProgress = [...(order.progress||[])], prevInvoiceDone = !!order.invoiceDone;
+  const done = _invoiceMismatch(order) && !_isUndo ? _askInvoiceMismatch(order) : !_isInvoiced(order);
+  await _setInvoiced(order, done);
+  if (!_isUndo) showUndoToast(done ? '「請求書済」にしました' : '「請求書未済」にしました', async () => {
+    order.progress = prevProgress; order.invoiceDone = prevInvoiceDone;
+    saveState(); if (sb) { try { await sbSaveOrder(order); } catch(e) {} }
+    showToast('↩ 元に戻しました', 'success'); loadList();
+  });
+  loadList();
+}
+
 // ─── 「元に戻す」付きのお知らせ ───────────────────────────────
 let _undoTimer = null;
 function showUndoToast(msg, undoFn, ms = 6000) {
@@ -1854,6 +1871,7 @@ async function quickStatus(orderId, newStatus) {
 async function quickProgress(orderId, key, _isUndo) {
   const order = S.orders.find(o => o.id === orderId);
   if (!order) return;
+  if (key === '請求書済') return quickInvoice(order, _isUndo);
   // 処理中表示（通信が遅い時も「動いている」とわかるように）
   document.querySelectorAll(`button[onclick*="quickProgress('${orderId}','${key}')"]`).forEach(btn => {
     btn.dataset.origText = btn.textContent;
@@ -1999,7 +2017,7 @@ function openShijishoView(order) {
     ${(()=>{
       const filterMonth=document.getElementById('filterMonth')?.value||'';
       const all=(S.orders||[]).filter(o=>_inSelectedMonth(o,filterMonth));
-      const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
+      const uninvoiced=all.filter(o=>_needsInvoice(o)).length;
       const total=all.length;
       const done=total-uninvoiced;
       const pct=total?Math.round(done/total*100):0;
@@ -2027,7 +2045,7 @@ function openShijishoView(order) {
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
         <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📄 請求書</div>
         <button id="invoiceBtn_${order.id}" onclick="toggleInvoiceDoneDetail('${order.id}')" style="width:100%;padding:12px;border-radius:10px;border:2px solid ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#7e22ce':'#d1d5db'};background:${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#f3e8ff':'#f8fafc'};font-size:15px;font-weight:700;color:${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#7e22ce':'#6b7280'};cursor:pointer">
-          ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'✅ 請求書済':'📄 請求書未済（タップで済にする）'}
+          ${_invoiceMismatch(order)?'⚠️ 請求書 要確認（タップして選ぶ）':(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'✅ 請求書済':'📄 請求書未済（タップで済にする）'}
         </button>
         ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'':`
         <button id="invoiceSkipBtn_${order.id}" onclick="skipInvoice('${order.id}')" style="width:100%;margin-top:8px;padding:12px;border-radius:10px;border:1.5px solid #d1d5db;background:#fff;font-size:15px;font-weight:700;color:#475569;cursor:pointer">⏭ まだ作れない → 後回しにして次へ</button>`}
@@ -2719,15 +2737,10 @@ async function saveAddedPhotos(orderId) {
 
 async function toggleInvoiceDoneDetail(id) {
   const order = S.orders.find(o=>o.id===id); if(!order) return;
-  const wasNotDone = !(order.invoiceDone||(order.progress||[]).includes('請求書済'));
-  order.invoiceDone = !order.invoiceDone;
-  // progressからも同期
-  if(order.invoiceDone) {
-    if(!(order.progress||[]).includes('請求書済')) order.progress=[...(order.progress||[]),'請求書済'];
-  } else {
-    order.progress=(order.progress||[]).filter(p=>p!=='請求書済');
-  }
-  saveState(); await sbSaveOrder(order);
+  const mismatch = _invoiceMismatch(order);
+  const wasNotDone = mismatch || !_isInvoiced(order);
+  const next = mismatch ? _askInvoiceMismatch(order) : !_isInvoiced(order);
+  await _setInvoiced(order, next); // 2か所をそろえて保存
   const done=order.invoiceDone||(order.progress||[]).includes('請求書済');
   const btn=document.getElementById(`invoiceBtn_${id}`);
   if(btn){
@@ -2739,7 +2752,7 @@ async function toggleInvoiceDoneDetail(id) {
   // バナーを再描画
   const filterMonth=document.getElementById('filterMonth')?.value||'';
   const all=(S.orders||[]).filter(o=>_inSelectedMonth(o,filterMonth));
-  const uninvoiced=all.filter(o=>!o.invoiceDone&&!(o.progress||[]).includes('請求書済')).length;
+  const uninvoiced=all.filter(o=>_needsInvoice(o)).length;
   const total=all.length; const doneCount=total-uninvoiced;
   const pct=total?Math.round(doneCount/total*100):0;
   const monthLabel=filterMonth?`${filterMonth.replace('-','年')}月`:'全期間';
@@ -2770,12 +2783,28 @@ async function toggleInvoiceDoneDetail(id) {
 const _invoiceSkipped = new Set(JSON.parse(sessionStorage.getItem('wc_invoice_skipped')||'[]'));
 function _saveInvoiceSkips(){ sessionStorage.setItem('wc_invoice_skipped', JSON.stringify([..._invoiceSkipped])); }
 function _isInvoiced(o){ return o.invoiceDone || (o.progress||[]).includes('請求書済'); }
+// 請求書の記録は「請求書チェック」と「進捗の請求書済」の2か所にある。片方だけ済になっているものは要確認
+function _invoiceMismatch(o){ return !!o.invoiceDone !== (o.progress||[]).includes('請求書済'); }
+// 請求書の作業が必要か（未済、または記録が食い違っていて確認が必要）
+function _needsInvoice(o){ return !_isInvoiced(o) || _invoiceMismatch(o); }
+// 2か所をそろえて保存する
+async function _setInvoiced(order, done){
+  order.invoiceDone = !!done;
+  order.progress = (order.progress||[]).filter(k => k !== '請求書済');
+  if (done) order.progress.push('請求書済');
+  saveState();
+  if (sb) { try { await sbSaveOrder(order); } catch(e) { console.log('請求書保存エラー:', e); } }
+}
+// 食い違っている時に、どちらが正しいか聞く（true=済 / false=未済）
+function _askInvoiceMismatch(order){
+  return confirm(`⚠️ ${order.orderNum||''} ${order.custName||''}\n\nこの指示書は請求書の記録が食い違っています\n（片方だけ「済」になっています）。\n\n請求書はもう作成済みですか？\n\nOK　　　＝ 作成済み（請求書済にする）\nキャンセル ＝ まだ（請求書未済にする）`);
+}
 function _uninvoicedQueue(){
   const filterMonth=document.getElementById('filterMonth')?.value||'';
   const isDni=document.getElementById('filterExtra')?.value==='deliveredNoInvoice';
   return (S.orders||[])
     .filter(o=>isDni ? o.status==='引渡済' : _inSelectedMonth(o,filterMonth))
-    .filter(o=>!_isInvoiced(o))
+    .filter(o=>_needsInvoice(o))
     .sort((a,b)=>(a.dateIn||a.savedAt||'').localeCompare(b.dateIn||b.savedAt||''));
 }
 function goNextUninvoiced(currentId){
