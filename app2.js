@@ -673,9 +673,23 @@ function renderThreeMonthItems() {
   });
 }
 
+// ─── オイル交換 ───────────────────────────────────────────────
+const DEF_OIL_ITEMS = [
+  'エンジンオイル交換','オイルエレメント交換','ATF交換','CVTF交換',
+  'デフオイル交換','ブレーキフルード交換','冷却水（LLC）交換',
+];
+let oilCheckState = {};
+
+function renderOilItems() {
+  _renderCheckGrid('repair-oil-items', DEF_OIL_ITEMS, oilCheckState, label => {
+    oilCheckState[label] = !oilCheckState[label];
+    renderOilItems();
+  });
+}
+
 function switchRepairType(type) {
   repairType = type;
-  ['car','truck','aircon','freezer','3month'].forEach(t => {
+  ['car','truck','aircon','freezer','3month','parts','oil'].forEach(t => {
     document.getElementById('repair-'+t+'-items').style.display = t===type ? '' : 'none';
     document.getElementById('r-tab-'+t).className = 'btn btn-sm ' + (t===type?'btn-primary':'btn-gray');
   });
@@ -684,6 +698,7 @@ function switchRepairType(type) {
   if (type==='aircon')  renderAirconItems();
   if (type==='freezer') renderFreezerItems();
   if (type==='3month')  renderThreeMonthItems();
+  if (type==='oil')     renderOilItems();
 }
 
 // ─── 「種類を選んでください」からのショートカット入場 ───────────
@@ -1043,7 +1058,9 @@ function renderSettings() {
       ${(S.insuranceCompanies||[]).map((name,i)=>`<span class="staff-tag" style="font-size:12px">${esc(name)}<button onclick="removeInsurance(${i})">×</button></span>`).join('')}
     </div>`;
 
-  document.getElementById('gasUrl').value = S.gasUrl||'';
+  // GAS欄は現在の画面に無いので、要素がある時だけ触る
+  const gasUrlEl = document.getElementById('gasUrl');
+  if (gasUrlEl) gasUrlEl.value = S.gasUrl||'';
   updateSyncUI();
 }
 
@@ -1051,8 +1068,8 @@ function updateSyncUI() {
   ['syncDot','syncDot2'].forEach(id => { const el=document.getElementById(id); if(el) el.classList.toggle('on',sbReady); });
   ['syncLabel','listSyncLabel'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent=sbReady?'クラウド同期':'ローカル保存'; });
 }
-function saveGasUrl() { S.gasUrl=document.getElementById('gasUrl').value.trim(); saveState(); showToast('保存しました','success'); }
-function clearGasUrl() { S.gasUrl=''; document.getElementById('gasUrl').value=''; saveState(); showToast('削除しました','info'); }
+function saveGasUrl() { const el=document.getElementById('gasUrl'); if(!el) return; S.gasUrl=el.value.trim(); saveState(); showToast('保存しました','success'); }
+function clearGasUrl() { S.gasUrl=''; const el=document.getElementById('gasUrl'); if(el) el.value=''; saveState(); showToast('削除しました','info'); }
 
 // ─── 車番から前回の作業を表示 ─────────────────────────────────
 const PLATE_FORMS = [
@@ -1065,7 +1082,7 @@ const _plateHistCache  = {};
 function _orderTypeLabel(o) {
   if (o.type === 'shakken')  return '車検';
   if (o.type === 'accident') return '事故修理';
-  return ({ '3month': '3か月点検', aircon: 'クーラー修理', freezer: '冷凍機修理' })[o.repairType] || '一般修理';
+  return ({ '3month': '3か月点検', aircon: 'クーラー修理', freezer: '冷凍機修理', parts: '部品注文', oil: 'オイル交換' })[o.repairType] || '一般修理';
 }
 function _orderWorkSummary(o) {
   const items = [
@@ -1224,11 +1241,14 @@ async function saveRepair() {
   setSaving('btnSaveRepair', true);
   const preventResults = {};
   DEF_PREVENT_OKNG.forEach(label => { if (S.preventOkNg?.[label]) preventResults[label]=S.preventOkNg[label]; });
-  const carItems    = Object.entries(S.carRepairCheckState||{}).filter(([,v])=>v).map(([k])=>k);
+  let carItems    = Object.entries(S.carRepairCheckState||{}).filter(([,v])=>v).map(([k])=>k);
   let truckItems  = Object.entries(S.truckCheckState||{}).filter(([,v])=>v).map(([k])=>k);
   const airconItems = Object.entries(S.airconCheckState||{}).filter(([,v])=>v).map(([k])=>k);
   if (repairType==='3month') {
     truckItems = Object.entries(threeMonthCheckState||{}).filter(([,v])=>v).map(([k])=>k);
+  }
+  if (repairType==='oil') {
+    carItems = Object.entries(oilCheckState||{}).filter(([,v])=>v).map(([k])=>k);
   }
   let remarksVal = document.getElementById('r-remarks').value;
   if (repairType==='freezer' && freezerWorkshop) {
@@ -1285,7 +1305,7 @@ function clearRepair() {
   const partsPending=document.getElementById('r-partsPending'); if(partsPending) partsPending.checked=false;
   document.getElementById('r-status').value = '入庫待ち';
   document.getElementById('r-dateIn').value = _todayStr();
-  S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; threeMonthCheckState={}; freezerWorkshop='';
+  S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; threeMonthCheckState={}; oilCheckState={}; freezerWorkshop='';
   currentSubStaff=[];
   const pc=document.getElementById('r-photos'); if(pc) pc.innerHTML='';
   window._pendingPhotos={};
@@ -1372,6 +1392,12 @@ async function saveShakken() {
     remarks:  document.getElementById('sk-remarks').value,
     skResults, savedAt: new Date().toLocaleString('ja-JP'),
   };
+  // トラック車検は「気がついた事」「予防整備」「灯火類」も保存する（saveEditと同じ形）
+  if (skType==='truck') {
+    order.skTruckNotice  = { ...(S.skTruckNotice||{}) };
+    order.skTruckPrevent = { ...(S.skTruckPrevent||{}) };
+    order.skTruckLights  = { ...(S.skTruckLights||{}) };
+  }
   try {
     S.orders.unshift(order); saveState();
     const ok = await sbSaveOrder(order);
@@ -1884,6 +1910,8 @@ async function quickProgress(orderId, key, _isUndo) {
   else { order.progress.push(key); }
   // 「請求書済」は請求書チェックとそろえる（片方だけだと件数がずれるため）
   if (key === '請求書済') order.invoiceDone = !has;
+  // 「3ヵ月点検記録簿済」は記録簿チェックとそろえる（未済一覧はrecordDoneで判定するため）
+  if (key === '3ヵ月点検記録簿済') order.recordDone = !has;
   saveState();
   if (!_isUndo) showUndoToast(`「${key}」を${has ? '外しました' : '付けました'}`, () => quickProgress(orderId, key, true));
   // Supabase保存完了後にloadList
@@ -2042,6 +2070,7 @@ function openShijishoView(order) {
         ${subNames ? shijishoField('👥 サブ担当',subNames) : ''}
       </div>
       ${sakugyoHtml}${photoHtml}
+      <button onclick="sendLineReport('${order.id}')" style="width:100%;margin-bottom:12px;padding:12px;border-radius:10px;border:none;background:#06c755;font-size:15px;font-weight:700;color:#fff;cursor:pointer">💬 LINEで報告</button>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
         <div style="color:var(--accent);font-size:13px;font-weight:700;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📄 請求書</div>
         <button id="invoiceBtn_${order.id}" onclick="toggleInvoiceDoneDetail('${order.id}')" style="width:100%;padding:12px;border-radius:10px;border:2px solid ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#7e22ce':'#d1d5db'};background:${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#f3e8ff':'#f8fafc'};font-size:15px;font-weight:700;color:${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'#7e22ce':'#6b7280'};cursor:pointer">
@@ -2126,10 +2155,13 @@ function closeShijishoView() { document.getElementById('shijishoView')?.remove()
 // ─── 写真全画面表示 ───────────────────────────────────────────
 let _fsRotation = 0;
 let _fsPhotoId  = null;
+let _fsScale = 1, _fsTx = 0, _fsTy = 0;
+let _fsFilePromise = null; // 送る用のFile（iOSで共有シートを開けるよう先に用意）
 
 function openPhotoFullscreen(src, type, photoId) {
   _fsRotation = 0;
   _fsPhotoId  = photoId || null;
+  _fsScale = 1; _fsTx = 0; _fsTy = 0; _fsFilePromise = null;
   const div = document.createElement('div');
   div.id = 'photoFullscreen';
   div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:flex-start';
@@ -2150,27 +2182,135 @@ function openPhotoFullscreen(src, type, photoId) {
   btnSave.textContent = '💾 保存';
   btnSave.style.cssText = 'background:var(--accent);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer';
   btnSave.onclick = () => saveFsPhoto();
+  const btnShare = document.createElement('button');
+  btnShare.textContent = '📤 送る';
+  btnShare.style.cssText = 'background:#06c755;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer';
+  btnShare.onclick = () => shareFsPhoto();
   const btnClose = document.createElement('button');
   btnClose.textContent = '✕ 閉じる';
   btnClose.style.cssText = 'background:#666;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer';
   btnClose.onclick = () => closePhotoFullscreen();
-  btnArea.appendChild(label); btnArea.appendChild(btnL); btnArea.appendChild(btnR); btnArea.appendChild(btnSave); btnArea.appendChild(btnClose);
+  btnArea.appendChild(label); btnArea.appendChild(btnL); btnArea.appendChild(btnR); btnArea.appendChild(btnSave); btnArea.appendChild(btnShare); btnArea.appendChild(btnClose);
   const imgWrap = document.createElement('div');
-  imgWrap.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%';
+  imgWrap.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;width:100%;touch-action:none';
+  _bindFsGestures(imgWrap);
   const imgEl = document.createElement('img');
   imgEl.id = 'fsPhoto';
   if (/^https?:/.test(src)) imgEl.crossOrigin = 'anonymous'; // 回転保存のため
   imgEl.src = src;
-  imgEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center';
+  imgEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;transition:transform 0.3s;transform-origin:center;user-select:none;-webkit-user-drag:none';
+  imgEl.draggable = false;
+  imgEl.addEventListener('load', () => { _fsFilePromise = _fsPhotoFile(); }, { once: true });
   imgWrap.appendChild(imgEl);
   div.appendChild(btnArea); div.appendChild(imgWrap);
   document.body.appendChild(div);
 }
 
+function _applyFsTransform(animate) {
+  const img = document.getElementById('fsPhoto');
+  if (!img) return;
+  _fsScale = Math.min(5, Math.max(1, _fsScale));
+  if (_fsScale === 1) { _fsTx = 0; _fsTy = 0; }
+  img.style.transition = animate ? 'transform 0.3s' : 'none';
+  img.style.transform = 'translate(' + _fsTx + 'px,' + _fsTy + 'px) rotate(' + _fsRotation + 'deg) scale(' + _fsScale + ')';
+}
+
+function _toggleFsZoom() {
+  _fsScale = _fsScale > 1 ? 1 : 2.5;
+  _applyFsTransform(true);
+}
+
+// ピンチ拡大・ドラッグ移動・ダブルタップ（スマホ）／ホイール・ドラッグ・ダブルクリック（PC）
+function _bindFsGestures(wrap) {
+  let pinchDist = 0, pinchScale = 1, dragX = 0, dragY = 0, startX = 0, startY = 0, moved = false, lastTap = 0, mouseDown = false;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const startDrag = (x, y) => { dragX = x - _fsTx; dragY = y - _fsTy; };
+  wrap.addEventListener('touchstart', e => {
+    e.preventDefault(); // ブラウザのズーム・スクロール・疑似マウスイベントを抑止
+    if (e.touches.length >= 2) {
+      pinchDist = dist(e.touches); pinchScale = _fsScale; moved = true;
+    } else {
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY; moved = false;
+      startDrag(startX, startY);
+    }
+  }, { passive: false });
+  wrap.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length >= 2 && pinchDist) {
+      _fsScale = pinchScale * dist(e.touches) / pinchDist;
+      _applyFsTransform(false);
+    } else if (e.touches.length === 1) {
+      const x = e.touches[0].clientX, y = e.touches[0].clientY;
+      if (Math.hypot(x - startX, y - startY) > 10) moved = true;
+      if (_fsScale > 1) { _fsTx = x - dragX; _fsTy = y - dragY; _applyFsTransform(false); }
+    }
+  }, { passive: false });
+  wrap.addEventListener('touchend', e => {
+    if (e.touches.length === 1) { pinchDist = 0; startDrag(e.touches[0].clientX, e.touches[0].clientY); return; }
+    if (e.touches.length) return;
+    pinchDist = 0;
+    if (moved) { lastTap = 0; return; }
+    const now = Date.now();
+    if (now - lastTap < 300) { lastTap = 0; _toggleFsZoom(); } else lastTap = now;
+  });
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    _fsScale *= e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    _applyFsTransform(false);
+  }, { passive: false });
+  wrap.addEventListener('dblclick', () => _toggleFsZoom());
+  wrap.addEventListener('mousedown', e => { if (_fsScale > 1) { mouseDown = true; startDrag(e.clientX, e.clientY); e.preventDefault(); } });
+  wrap.addEventListener('mousemove', e => { if (mouseDown) { _fsTx = e.clientX - dragX; _fsTy = e.clientY - dragY; _applyFsTransform(false); } });
+  wrap.addEventListener('mouseup', () => { mouseDown = false; });
+  wrap.addEventListener('mouseleave', () => { mouseDown = false; });
+}
+
 function rotateFs(deg) {
   _fsRotation = (_fsRotation + deg + 360) % 360;
+  _applyFsTransform(true);
+}
+
+// 表示中の写真をFile化（data:/http はfetch、失敗時はキャンバス経由）
+async function _fsPhotoFile() {
   const img = document.getElementById('fsPhoto');
-  if (img) img.style.transform = 'rotate(' + _fsRotation + 'deg)';
+  if (!img) return null;
+  let blob = null;
+  try {
+    const res = await fetch(img.src);
+    if (res.ok) blob = await res.blob();
+  } catch(e) {}
+  if (!blob || !/^image\//.test(blob.type)) {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    } catch(e) { blob = null; }
+  }
+  if (!blob) return null;
+  const type = /^image\//.test(blob.type) ? blob.type : 'image/jpeg';
+  const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
+  return new File([blob], 'photo_' + Date.now() + '.' + ext, { type });
+}
+
+async function shareFsPhoto() {
+  if (!_fsFilePromise) _fsFilePromise = _fsPhotoFile();
+  const file = await _fsFilePromise;
+  if (!file) { showToast('⚠️ この写真は送れません', 'error'); return; }
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); }
+    catch(e) {
+      if (e.name === 'AbortError') return; // ユーザーがキャンセル
+      showToast(e.name === 'NotAllowedError' ? 'もう一度「📤 送る」を押してください' : '⚠️ 共有できませんでした', 'error');
+    }
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  showToast('📥 写真を保存しました。LINEのトークで保存した写真を添付してください', 'info', 5000);
 }
 
 async function saveFsPhoto() {
@@ -2210,6 +2350,7 @@ async function saveFsPhoto() {
 function closePhotoFullscreen() {
   document.getElementById('photoFullscreen')?.remove();
   _fsRotation = 0; _fsPhotoId = null;
+  _fsScale = 1; _fsTx = 0; _fsTy = 0; _fsFilePromise = null;
 }
 
 function openManageModal(id) {
@@ -2859,6 +3000,9 @@ async function toggleRecordDoneList(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
   order.recordDone = !order.recordDone;
+  // 進捗タグ「3ヵ月点検記録簿済」もそろえる
+  order.progress = (order.progress||[]).filter(k => k !== '3ヵ月点検記録簿済');
+  if (order.recordDone) order.progress.push('3ヵ月点検記録簿済');
   saveState();
   await sbSaveOrder(order);
   showToast(order.recordDone ? '📋 記録簿済にしました' : '📋 記録簿未に戻しました', 'success');
@@ -2893,6 +3037,9 @@ async function toggleRecordDone(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
   order.recordDone = !order.recordDone;
+  // 進捗タグ「3ヵ月点検記録簿済」もそろえる
+  order.progress = (order.progress||[]).filter(k => k !== '3ヵ月点検記録簿済');
+  if (order.recordDone) order.progress.push('3ヵ月点検記録簿済');
   saveState();
   await sbSaveOrder(order);
   showToast(order.recordDone ? '📋 記録簿作成済みにしました' : '記録簿未に戻しました', 'success');
