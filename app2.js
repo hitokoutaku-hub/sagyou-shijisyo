@@ -2504,7 +2504,7 @@ function openEditModal(id) {
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
             <div style="font-size:13px;font-weight:700;color:#40d070">📄 請求書作成済み</div>
-            <input type="checkbox" id="edit-invoiceDone" ${order.invoiceDone?'checked':''} style="width:22px;height:22px;cursor:pointer;accent-color:#40d070">
+            <input type="checkbox" id="edit-invoiceDone" ${(order.invoiceDone||(order.progress||[]).includes('請求書済'))?'checked':''} style="width:22px;height:22px;cursor:pointer;accent-color:#40d070">
           </div>
         </div>
       </div>
@@ -2800,6 +2800,9 @@ async function saveEdit() {
   order.nyukoPlace   = document.getElementById('edit-nyukoPlace')?.value.trim() || '';
   order.partsPending = document.getElementById('edit-partsPending')?.checked || false;
   order.invoiceDone  = document.getElementById('edit-invoiceDone')?.checked  || false;
+  // 「請求書済」の進捗タグも揃える（片方だけだと未済に数えられるため）
+  order.progress = (order.progress||[]).filter(k => k !== '請求書済');
+  if (order.invoiceDone) order.progress.push('請求書済');
 
   if (order.type === 'repair') {
     order.repairType    = editRepairType;
@@ -3025,6 +3028,9 @@ async function toggleInvoiceDone(id) {
   const order = S.orders.find(o => o.id === id);
   if (!order) return;
   order.invoiceDone = !order.invoiceDone;
+  // 「請求書済」の進捗タグも揃える（片方だけだと未済に数えられるため）
+  order.progress = (order.progress||[]).filter(k => k !== '請求書済');
+  if (order.invoiceDone) order.progress.push('請求書済');
   saveState();
   await sbSaveOrder(order);
   showToast(order.invoiceDone ? '📄 請求書作成済みにしました' : '請求書未に戻しました', 'success');
