@@ -122,6 +122,7 @@
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="date" id="r-dateIn" style="flex:1;">
             <button type="button" onclick="document.getElementById('r-dateIn').value=new Date().toLocaleDateString('sv-SE')" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">今日</button>
+            <button type="button" onclick="document.getElementById('r-dateIn').value=''" style="background:#8b5cf6;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">未定</button>
           </div>
         </div>
       </div>
@@ -263,6 +264,7 @@
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="date" id="sk-dateIn" style="flex:1;">
             <button type="button" onclick="document.getElementById('sk-dateIn').value=new Date().toLocaleDateString('sv-SE')" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">今日</button>
+            <button type="button" onclick="document.getElementById('sk-dateIn').value=''" style="background:#8b5cf6;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">未定</button>
           </div>
         </div>
       </div>
@@ -297,6 +299,10 @@
       <div class="row2">
         <div><label>車名</label><input id="sk-carName" inputmode="text"></div>
         <div><label>出庫予定日</label><input type="date" id="sk-dateOut"></div>
+      </div>
+      <div class="row2">
+        <div><label>車検満了日</label><input type="date" id="sk-shakenExpiry"></div>
+        <div></div>
       </div>
       <label>メイン担当</label>
       <div id="mechSelectShakken"></div>
@@ -356,6 +362,7 @@
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="date" id="ac-dateIn" style="flex:1;">
             <button type="button" onclick="document.getElementById('ac-dateIn').value=new Date().toLocaleDateString('sv-SE')" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">今日</button>
+            <button type="button" onclick="document.getElementById('ac-dateIn').value=''" style="background:#8b5cf6;color:#fff;border:none;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;">未定</button>
           </div>
         </div>
       </div>
@@ -475,6 +482,6 @@
 </div>
 
 <script src="auth.js?v=3"></script>
-<script src="app2.js?v=25"></script>
+<script src="app2.js?v=29"></script>
 </body>
 </html>

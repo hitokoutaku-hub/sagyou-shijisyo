@@ -154,6 +154,7 @@ async function sbSaveOrderOnce(order) {
     id: order.id, order_num: order.orderNum, order_type: order.type,
     status: order.status, cust_name: order.custName, car_name: order.carName,
     car_plate: order.carPlate, date_in: order.dateIn || null, date_out: order.dateOut || null,
+    shaken_expiry: order.shakenExpiry || null,
     mech_name: order.mechName, mech_id: order.mechId,
     sub_staff: order.subStaff || [],
     reception_name: order.receptionName, remarks: order.remarks,
@@ -214,7 +215,7 @@ function _rowToOrder(row) {
   return {
       id: row.id, orderNum: row.order_num, type: row.order_type, status: row.status,
       custName: row.cust_name, carName: row.car_name, carPlate: row.car_plate,
-      dateIn: row.date_in, dateOut: row.date_out,
+      dateIn: row.date_in, dateOut: row.date_out, shakenExpiry: row.shaken_expiry || '',
       mechName: row.mech_name, mechId: row.mech_id,
       subStaff: row.sub_staff || [],
       receptionName: row.reception_name, remarks: row.remarks, insurance: row.insurance,
@@ -1383,6 +1384,7 @@ async function saveShakken() {
     carPlate: document.getElementById('sk-carPlate').value,
     dateIn:   document.getElementById('sk-dateIn').value,
     dateOut:  document.getElementById('sk-dateOut').value,
+    shakenExpiry: document.getElementById('sk-shakenExpiry')?.value || '',
     nyukoMethod: document.getElementById('sk-nyukoMethod')?.value||'',
     nyukoTime:   document.getElementById('sk-nyukoTime')?.value||'',
     nyukoPlace:  document.getElementById('sk-nyukoPlace')?.value.trim()||'',
@@ -1410,7 +1412,7 @@ async function saveShakken() {
 
 function clearShakken() {
   hidePlateHistory('sk-carPlate');
-  ['sk-custName','sk-carName','sk-carPlate','sk-dateIn','sk-dateOut','sk-remarks','sk-nyukoPlace','sk-nyukoTime'].forEach(id => {
+  ['sk-custName','sk-carName','sk-carPlate','sk-dateIn','sk-dateOut','sk-shakenExpiry','sk-remarks','sk-nyukoPlace','sk-nyukoTime'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
   });
   const skNyukoMethod=document.getElementById('sk-nyukoMethod'); if(skNyukoMethod) skNyukoMethod.value='';
@@ -1704,12 +1706,19 @@ async function loadList(forceLoadAll) {
     const itemsPreview=allItems.length?`<div style="font-size:14px;color:#f97316;margin-top:4px;">🔧 ${esc(allItems.join('・'))}${(o.carItems||[]).length+(o.truckItems||[]).length+(o.airconItems||[]).length>3?'…':''}</div>`:'';
     const isPast=(o.dateIn||'')!==''&&(o.dateIn||'')<_today&&o.status!=='引渡済';
     const isUntaken=o.status==='入庫待ち'&&!o.mechName;
+    const isNotStartedDue=o.status==='入庫待ち'&&(o.dateIn||'')!==''&&(o.dateIn||'')<=_today;
+    const notStartedBadge=isNotStartedDue?`<span style="background:#ef4444;color:#fff;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-right:4px;">🔥 未着手</span>`:'';
+    const overdueDays=isNotStartedDue&&o.dateIn<_today?Math.round((new Date(_today+'T00:00:00')-new Date(o.dateIn+'T00:00:00'))/86400000):0;
+    const overdueBadge=overdueDays>0?`<span style="background:#991b1b;color:#fff;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-right:4px;">⚠ ${overdueDays}日過ぎ</span>`:'';
+    const shakenExp=o.shakenExpiry||'';
+    const _sl30=new Date();_sl30.setDate(_sl30.getDate()+30);
+    const shakenStyle=shakenExp&&shakenExp<_today?'color:#dc2626;font-weight:700':(shakenExp&&shakenExp<=_sl30.toLocaleDateString('sv-SE')?'color:#ea580c;font-weight:700':'');
     const bookmarkBadge=o.bookmarked?`<span style="color:#7e22ce;font-size:14px;">⭐</span>`:'';
     const curFilterMonth=document.getElementById('filterMonth')?.value||'';
     const isCarry=curFilterMonth && (o.dateIn||'') && !(o.dateIn||'').startsWith(curFilterMonth);
     const carryBadge=isCarry?`<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-right:4px;">📌 前月から繰越</span>`:'';
     const alertMark=isPast?'⚠ ':'';
-    const cardBorder=o.status==='作業中'?'2px solid #ef4444':isPast?'2px solid #f97316':'1.5px solid var(--border)';
+    const cardBorder=isNotStartedDue?'2.5px solid #ef4444':o.status==='作業中'?'2px solid #ef4444':isPast?'2px solid #f97316':'1.5px solid var(--border)';
     // 備考1行目
     const remarksPreview=o.remarks?(()=>{const first=o.remarks.trim().split('\n')[0];return first?`<div style="font-size:13px;color:#64748b;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📝 ${esc(first)}</div>`:''})():'';
     // ステータスボタン4つ
@@ -1731,13 +1740,13 @@ async function loadList(forceLoadAll) {
     const rikuunBadge=o.type==='shakken'?(prog.includes('陸運局回送済')?`<span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-right:4px;">🏢 回送済</span>`:prog.includes('先に陸運局')?`<span style="background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;margin-right:4px;">🏢 陸運局へ先に</span>`:''):'';
     // 私が担当しますボタン
     const takeBtn=isUntaken?`<div onclick="takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
-    return `<div class="order-item" onclick="if(!event.target.closest('button'))showDetail('${o.id}')" style="border:${cardBorder};box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;cursor:pointer;">
+    return `<div class="order-item" onclick="if(!event.target.closest('button'))showDetail('${o.id}')" style="border:${cardBorder};${isNotStartedDue?'background:#fef2f2;':''}box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;cursor:pointer;">
       <div class="top">
-        <span class="order-num">${carryBadge}${bookmarkBadge}${rikuunBadge}${alertMark}${esc(o.orderNum||'（番号なし）')}</span>
+        <span class="order-num">${carryBadge}${bookmarkBadge}${rikuunBadge}${notStartedBadge}${overdueBadge}${alertMark}${esc(o.orderNum||'（番号なし）')}</span>
       </div>
       <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${esc(o.custName)}　${esc(o.carName)}${o.carPlate?'　【'+esc(o.carPlate)+'】':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
-        <span>📅 ${o.dateIn||'未設定'}</span>${(o.status==='完了'||o.status==='引渡済')&&o.completedAt?`<span>✅ 完了 ${_isoToJstDateStr(o.completedAt).slice(5).replace('-','/')}</span>`:''}
+        <span>📅 ${o.dateIn||'未設定'}</span>${shakenExp?`<span style="${shakenStyle}">🗓️ 車検満了 ${shakenExp.slice(5).replace('-','/')}</span>`:''}${(o.status==='完了'||o.status==='引渡済')&&o.completedAt?`<span>✅ 完了 ${_isoToJstDateStr(o.completedAt).slice(5).replace('-','/')}</span>`:''}
         <span>👤 ${esc(o.mechName||'未定')}${subNames?'・'+subNames:''}</span>
       </div>
       ${nyukoInfo?`<div style="color:#1d4ed8;font-size:15px;font-weight:600;margin-top:6px;">🚗 ${nyukoInfo}</div>`:''}
@@ -1773,16 +1782,15 @@ async function loadList(forceLoadAll) {
   }
 
   const _fm=filterMonth||_curYM();
+  // 今日以前に入庫予定で、まだ作業が始まっていないもの（先月以前の分も含め、1か所に集める）
+  const notStartedOrders=orders.filter(o=>o.status==='入庫待ち'&&(o.dateIn||'')!==''&&(o.dateIn||'')<=_today);
+  const notStartedIds=new Set(notStartedOrders.map(o=>o.id));
   const carryoverOrders=orders.filter(o=>{
     const d=o.dateIn||'';
-    return d && d<_fm && o.status!=='完了' && o.status!=='引渡済';
+    return d && d<_fm && o.status!=='完了' && o.status!=='引渡済' && !notStartedIds.has(o.id);
   });
   const carryIds=new Set(carryoverOrders.map(o=>o.id));
   const inProgressOrders=orders.filter(o=>!carryIds.has(o.id)&&(o.status==='作業中'||o.status==='入庫中'||o.status==='車検中'));
-  const todayOrders=orders.filter(o=>{
-    if(carryIds.has(o.id))return false;
-    const d=o.dateIn||'';return o.status==='入庫待ち'&&(d===_today||(d!==''&&d<_today));
-  });
   const tomorrowOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')===_tomorrow);
   const futureOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&(o.dateIn||'')>_tomorrow);
   const undecidedOrders=orders.filter(o=>!carryIds.has(o.id)&&o.status==='入庫待ち'&&!o.dateIn);
@@ -1793,14 +1801,21 @@ async function loadList(forceLoadAll) {
   const todayDoneOrders=doneOrders.filter(o=>_isoToJstDateStr(o.completedAt)===_today);
   const doneOrdersRest=doneOrders.filter(o=>_isoToJstDateStr(o.completedAt)!==_today);
 
-  const todayLabel=`今日の入庫予定　${_today.slice(5).replace('-','/')}（${_todayWeekday}）`;
+  const todayLabel=`今日やるべき（未着手）　${_today.slice(5).replace('-','/')}（${_todayWeekday}）`;
   const tomorrowLabel=`明日の入庫予定　${_tomorrow.slice(5).replace('-','/')}（${_tomorrowWeekday}）`;
 
+  const overdueCount=notStartedOrders.filter(o=>o.dateIn<_today).length;
+  const notStartedBanner=notStartedOrders.length?`<div onclick="document.getElementById('grpNotStarted')?.scrollIntoView({behavior:'smooth'})" style="background:#ef4444;color:#fff;border-radius:12px;padding:16px;margin-bottom:12px;cursor:pointer;box-shadow:0 2px 10px rgba(239,68,68,0.45);">
+      <div style="font-size:21px;font-weight:800;">🔥 未着手 ${notStartedOrders.length}件${overdueCount?`　<span style="font-size:16px;">⚠ 期限過ぎ ${overdueCount}件</span>`:''}</div>
+      <div style="font-size:13px;margin-top:4px;opacity:0.9;">タップで未着手の一覧へ移動します</div>
+    </div>`:'';
+
   c.innerHTML=
+    notStartedBanner+
     renderGroup(`📌 前月から繰越（未完成）　${carryoverOrders.length}件`,'📌','#fef3c7','#92400e','#f59e0b','#f59e0b',carryoverOrders,carryoverOrders.length===0)+
     renderGroup(`🎉 今日の完了実績　${todayDoneOrders.length}件`,'🎉','#f0fdf4','#166534','#22c55e','#16a34a',todayDoneOrders,todayDoneOrders.length===0)+
+    '<div id="grpNotStarted">'+renderGroup(todayLabel,'🔥','#ef4444','#ffffff','#b91c1c','#7f1d1d',notStartedOrders)+'</div>'+
     renderGroup('現在進行中','🔨','#fef2f2','#991b1b','#ef4444','#ef4444',inProgressOrders)+
-    renderGroup(todayLabel,'🔥','#fff7ed','#c2410c','#f97316','#f97316',todayOrders)+
     renderGroup(tomorrowLabel,'📋','#eff6ff','#1d4ed8','#3b82f6','#3b82f6',tomorrowOrders)+
     renderGroup('明日以降の入庫予定','📅','#f0fdf4','#15803d','#22c55e','#22c55e',futureOrders,futureOrders.length===0)+
     renderGroup(`⚠️ ステータス未設定（要確認）　${unknownStatusOrders.length}件`,'⚠️','#fef2f2','#991b1b','#ef4444','#ef4444',unknownStatusOrders,unknownStatusOrders.length===0)+
@@ -2042,23 +2057,6 @@ function openShijishoView(order) {
         <button onclick="closeShijishoView()" style="background:#f8fafc;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;color:var(--sub);">×</button>
       </div>
     </div>
-    ${(()=>{
-      const filterMonth=document.getElementById('filterMonth')?.value||'';
-      const all=(S.orders||[]).filter(o=>_inSelectedMonth(o,filterMonth));
-      const uninvoiced=all.filter(o=>_needsInvoice(o)).length;
-      const total=all.length;
-      const done=total-uninvoiced;
-      const pct=total?Math.round(done/total*100):0;
-      const monthLabel=filterMonth?`${filterMonth.replace('-','年')}月`:'全期間';
-      return uninvoiced>0?`<div id="invoiceBanner" style="padding:10px 16px;background:#fff7ed;border-bottom:1px solid #fed7aa">
-        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#92400e;margin-bottom:5px">
-          <span>📄 ${monthLabel}の請求書未済 残り${uninvoiced}件</span><span>${done}/${total}件完了 ${pct}%</span>
-        </div>
-        <div style="background:#fed7aa;border-radius:99px;height:8px;overflow:hidden">
-          <div style="background:#f97316;width:${pct}%;height:100%;border-radius:99px"></div>
-        </div>
-      </div>`:`<div id="invoiceBanner" style="padding:8px 16px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;font-size:12px;font-weight:700;color:#15803d">✅ ${monthLabel}の請求書はすべて完了しています</div>`;
-    })()}
     <div style="max-width:900px;margin:0 auto;padding:16px">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
         ${shijishoField('👤 顧客名',order.custName)}
@@ -2066,6 +2064,7 @@ function openShijishoView(order) {
         ${shijishoField('🔢 ナンバー',order.carPlate)}
         ${shijishoField('📅 入庫日',order.dateIn)}
         ${shijishoField('📅 出庫予定',order.dateOut)}
+        ${shijishoField('🗓️ 車検満了日',order.shakenExpiry)}
         ${shijishoField('🔧 メイン担当',order.mechName)}
         ${subNames ? shijishoField('👥 サブ担当',subNames) : ''}
       </div>
@@ -2453,11 +2452,18 @@ function openEditModal(id) {
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">入庫日</div>
-            <input id="edit-dateIn" type="date" value="${order.dateIn||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+            <div style="display:flex;gap:6px">
+              <input id="edit-dateIn" type="date" value="${order.dateIn||''}" style="flex:1;min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+              <button type="button" onclick="document.getElementById('edit-dateIn').value=''" style="background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">未定</button>
+            </div>
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">出庫予定日</div>
             <input id="edit-dateOut" type="date" value="${order.dateOut||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--sub);margin-bottom:4px">車検満了日</div>
+            <input id="edit-shakenExpiry" type="date" value="${order.shakenExpiry||''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">
           </div>
           <div>
             <div style="font-size:11px;color:var(--sub);margin-bottom:4px">担当整備士</div>
@@ -2788,8 +2794,9 @@ async function saveEdit() {
   order.custName  = document.getElementById('edit-custName')?.value.trim() || order.custName;
   order.carName   = document.getElementById('edit-carName')?.value.trim()  || order.carName;
   order.carPlate  = document.getElementById('edit-carPlate')?.value.trim() || order.carPlate;
-  order.dateIn    = document.getElementById('edit-dateIn')?.value           || order.dateIn;
+  order.dateIn    = document.getElementById('edit-dateIn')?.value           ?? order.dateIn;
   order.dateOut   = document.getElementById('edit-dateOut')?.value          || order.dateOut;
+  order.shakenExpiry = document.getElementById('edit-shakenExpiry')?.value  ?? order.shakenExpiry;
   order.mechName  = document.getElementById('edit-mechName')?.value.trim() || order.mechName;
   order.status    = document.getElementById('edit-status')?.value           || order.status;
   if((order.status==='完了'||order.status==='引渡済') && !order.completedAt) order.completedAt=new Date().toISOString();
