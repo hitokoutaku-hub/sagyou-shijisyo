@@ -62,7 +62,7 @@ function loadState() {
 function saveState() {
   _dniCache.t = 0;
   const toSave = { ...S, orders: [] };
-  localStorage.setItem('ws3_state', JSON.stringify(toSave));
+  try { localStorage.setItem('ws3_state', JSON.stringify(toSave)); } catch(e) { console.log('状態の保存に失敗（容量超過）:', e); }
 }
 
 // ─── トースト通知 ─────────────────────────────────────────────
@@ -116,7 +116,7 @@ function setSaving(btnId, saving) {
 function getPendingWrites() {
   try { return JSON.parse(localStorage.getItem('ws3_pending_writes') || '[]'); } catch(e) { return []; }
 }
-function setPendingWrites(list) { localStorage.setItem('ws3_pending_writes', JSON.stringify(list)); }
+function setPendingWrites(list) { try { localStorage.setItem('ws3_pending_writes', JSON.stringify(list)); } catch(e) { /* 容量超過時は写真データを落としてでも他の書き込みを守る */ try { localStorage.setItem('ws3_pending_writes', JSON.stringify(list.filter(w => w.table !== DB_TABLES.PHOTOS))); } catch(e2) {} } }
 function queuePendingWrite(item) { const list = getPendingWrites(); list.push(item); setPendingWrites(list); }
 async function sbWriteOnce(table, op, payload, matchId) {
   if (op === 'insert') { const { error } = await sb.from(table).insert(payload); if (error) throw error; }
@@ -137,16 +137,22 @@ async function sbWrite(table, op, payload, matchId, _attempt) {
     return false;
   }
 }
+let _flushingWrites = false;
 async function flushPendingWrites() {
+  if (_flushingWrites || !sb) return;
   const list = getPendingWrites();
-  if (!list.length || !sb) return;
-  const remaining = [];
-  for (const item of list) {
-    try { await sbWriteOnce(item.table, item.op, item.payload, item.matchId); }
-    catch(e) { remaining.push(item); }
-  }
-  setPendingWrites(remaining);
-  if (remaining.length === 0 && list.length > 0) showToast(`✅ 保留中だった${list.length}件を送信しました`, 'success');
+  if (!list.length) return;
+  _flushingWrites = true;
+  // 先にキューを空にしてから送る（送信中に増えた保存待ちが、書き戻しで消えないように）
+  setPendingWrites([]);
+  let sent = 0;
+  try {
+    for (const item of list) {
+      try { await sbWriteOnce(item.table, item.op, item.payload, item.matchId); sent++; }
+      catch(e) { queuePendingWrite(item); }
+    }
+  } finally { _flushingWrites = false; }
+  if (sent > 0 && getPendingWrites().length === 0) showToast(`✅ 保留中だった${list.length}件を送信しました`, 'success');
 }
 
 async function sbSaveOrderOnce(order) {
@@ -175,7 +181,7 @@ function getPendingOrders() {
   try { return JSON.parse(localStorage.getItem('ws3_pending_orders') || '[]'); } catch(e) { return []; }
 }
 function setPendingOrders(list) {
-  localStorage.setItem('ws3_pending_orders', JSON.stringify(list));
+  try { localStorage.setItem('ws3_pending_orders', JSON.stringify(list)); } catch(e) { console.log('保留中の指示書を端末に保存できませんでした（容量超過）:', e); }
 }
 function queuePendingOrder(order) {
   const list = getPendingOrders().filter(o => o.id !== order.id);
@@ -185,16 +191,23 @@ function queuePendingOrder(order) {
 function removePendingOrder(id) {
   setPendingOrders(getPendingOrders().filter(o => o.id !== id));
 }
+let _flushingOrders = false;
 async function flushPendingOrders() {
+  if (_flushingOrders) return;
   const list = getPendingOrders();
   if (!list.length || !sb) return;
-  for (const order of list) {
-    try { await sbSaveOrderOnce(order); removePendingOrder(order.id); }
-    catch(e) { console.log('保留中の指示書、再送信も失敗:', order.orderNum, e); }
-  }
+  _flushingOrders = true;
+  try {
+    for (const order of list) {
+      try { await sbSaveOrderOnce(order); removePendingOrder(order.id); }
+      catch(e) { console.log('保留中の指示書、再送信も失敗:', order.orderNum, e); }
+    }
+  } finally { _flushingOrders = false; }
 }
 async function sbSaveOrder(order, _attempt) {
   if (!sb) { queuePendingOrder(order); return false; }
+  // 完了・引渡済なのに完了日が無いものは、ここで補う（新規登録で選んだ場合など）
+  if ((order.status === '完了' || order.status === '引渡済') && !order.completedAt) order.completedAt = new Date().toISOString();
   _attempt = _attempt || 1;
   try {
     await sbSaveOrderOnce(order);
@@ -209,6 +222,13 @@ async function sbSaveOrder(order, _attempt) {
     queuePendingOrder(order);
     return false;
   }
+}
+
+// 1項目だけ変える操作は、その項目だけを書き込む（端末の古い丸ごとデータで、他の端末の新しい変更を上書きしないため）
+// まだクラウドに届いていない（保存待ちの）指示書は、丸ごと保存でないと項目が届かないので従来方式にする
+async function sbPatchOrder(order, payload) {
+  if (!sb || getPendingOrders().some(o => o.id === order.id)) return sbSaveOrder(order);
+  return sbWrite(DB_TABLES.KIROKU, 'update', payload, order.id);
 }
 
 function _rowToOrder(row) {
@@ -356,7 +376,7 @@ function addPhotoSlot(containerId, type) {
           <img src="${compressed}" style="width:100%;border-radius:6px">`;
         if (container) container.appendChild(div);
         window._pendingPhotos = window._pendingPhotos || {};
-        window._pendingPhotos[slotId] = { type, dataUrl: compressed };
+        window._pendingPhotos[slotId] = { type, dataUrl: compressed, container: containerId };
       });
     });
     input.remove();
@@ -369,14 +389,21 @@ function removePhotoSlot(slotId) {
   if (el) { el.remove(); delete (window._pendingPhotos || {})[slotId]; }
 }
 
-async function uploadPendingPhotos(orderId) {
+async function uploadPendingPhotos(orderId, containerId) {
   const pending = window._pendingPhotos || {};
-  const keys    = Object.keys(pending);
+  // そのフォームで追加した写真だけを付ける（別の画面で追加した写真が混ざらないように）
+  const keys    = Object.keys(pending).filter(k => !containerId || !pending[k].container || pending[k].container === containerId);
   if (!keys.length || !sb) return;
   const rows = await _buildPhotoRows(orderId, keys.map(k => ({ type: pending[k].type, dataUrl: pending[k].dataUrl })));
   const ok = await sbWrite(DB_TABLES.PHOTOS, 'insert', rows, null);
   if (!ok) showToast('⚠️ 写真の保存に失敗。自動で再送信します', 'error');
-  window._pendingPhotos = {};
+  keys.forEach(k => delete pending[k]);
+}
+
+// フォームをクリアするとき、そのフォームの未保存写真だけを捨てる
+function _dropPendingPhotos(containerId) {
+  const pending = window._pendingPhotos || {};
+  Object.keys(pending).forEach(k => { if (!pending[k].container || pending[k].container === containerId) delete pending[k]; });
 }
 
 function previewPhoto(inputId, previewId) {
@@ -385,7 +412,7 @@ function previewPhoto(inputId, previewId) {
   _compressAndRun(file, compressed => {
     document.getElementById(previewId).innerHTML = `<img src="${compressed}" style="width:100%;border-radius:8px;margin-top:4px">`;
     window._pendingPhotos = window._pendingPhotos || {};
-    window._pendingPhotos[inputId] = { type: inputId.includes('receipt') ? '納品書' : '修理箇所', dataUrl: compressed };
+    window._pendingPhotos[inputId] = { type: inputId.includes('receipt') ? '納品書' : '修理箇所', dataUrl: compressed, container: inputId.startsWith('sk-') ? 'sk-photos' : inputId.startsWith('ac-') ? 'ac-photos' : inputId.startsWith('r-') ? 'r-photos' : '' };
   });
 }
 
@@ -394,9 +421,11 @@ async function deletePhoto(photoId, slotId) {
   const slot = document.getElementById(slotId);
   const url  = slot?.querySelector('img')?.dataset.url || '';
   slot?.remove();
-  if (sb && photoId) { await sbWrite(DB_TABLES.PHOTOS, 'delete', null, photoId); }
+  let delOk = true;
+  if (sb && photoId) { delOk = await sbWrite(DB_TABLES.PHOTOS, 'delete', null, photoId); }
   const path = _storagePathFromUrl(url);
-  if (sb && path) { try { await sb.storage.from(PHOTO_BUCKET).remove([path]); } catch(e) {} }
+  // 記録の削除に失敗したときは画像ファイルも消さない（記録だけ残って表示できなくなるため）
+  if (sb && path && delOk) { try { await sb.storage.from(PHOTO_BUCKET).remove([path]); } catch(e) {} }
 }
 
 function selectAllPhotos(val) { document.querySelectorAll('[id^="photo-check-"]').forEach(cb => cb.checked = val); }
@@ -1283,7 +1312,7 @@ async function saveRepair() {
     S.orders.unshift(order);
     saveState();
     const ok = await sbSaveOrder(order);
-    await uploadPendingPhotos(order.id);
+    await uploadPendingPhotos(order.id, 'r-photos');
     if (ok) {
       showToast(`✅ 保存しました（${orderNum}）`, 'success');
     } else {
@@ -1309,11 +1338,12 @@ function clearRepair() {
   S.checkState={notice:{},work:{}}; S.preventOkNg={}; S.carRepairCheckState={}; S.truckCheckState={}; S.airconCheckState={}; threeMonthCheckState={}; oilCheckState={}; freezerWorkshop='';
   currentSubStaff=[];
   const pc=document.getElementById('r-photos'); if(pc) pc.innerHTML='';
-  window._pendingPhotos={};
+  _dropPendingPhotos('r-photos');
   switchRepairType('car');
   renderAllChecklists(); renderCarRepairItems(); renderTruckItems(); renderAirconItems();
   renderSubStaffArea();
   updateNumDisplay();
+  saveState();
 }
 
 // ─── 保存：事故修理 ───────────────────────────────────────────
@@ -1334,14 +1364,14 @@ async function saveAccident() {
     dateIn:   document.getElementById('ac-dateIn').value,
     dateOut:  document.getElementById('ac-dateOut').value,
     mechName: getMechName('mechSelectAccident'), mechId: getMechId('mechSelectAccident'),
-    subStaff: [...currentSubStaff],
+    subStaff: [],
     insurance, remarks: document.getElementById('ac-remarks').value,
     savedAt:  new Date().toLocaleString('ja-JP'),
   };
   try {
     S.orders.unshift(order); saveState();
     const ok = await sbSaveOrder(order);
-    await uploadPendingPhotos(order.id);
+    await uploadPendingPhotos(order.id, 'ac-photos');
     showToast(ok ? `✅ 保存しました（${orderNum}）` : '⚠️ クラウド同期失敗。自動で再送信します', ok?'success':'error');
     clearAccident();
   } catch(e) { showToast('保存に失敗しました','error'); }
@@ -1357,9 +1387,11 @@ function clearAccident() {
   document.getElementById('ac-dateIn').value=_todayStr();
   document.getElementById('ac-insurance').value='';
   ['ac-preview-repair','ac-preview-receipt'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
+  const acp=document.getElementById('ac-photos'); if(acp) acp.innerHTML='';
   currentSubStaff=[];
-  window._pendingPhotos={};
+  _dropPendingPhotos('ac-photos');
   updateNumDisplay();
+  saveState();
 }
 
 // ─── 保存：車検 ───────────────────────────────────────────────
@@ -1390,7 +1422,7 @@ async function saveShakken() {
     nyukoPlace:  document.getElementById('sk-nyukoPlace')?.value.trim()||'',
     partsPending: document.getElementById('sk-partsPending')?.checked||false,
     mechName: getMechName('mechSelectShakken'), mechId: getMechId('mechSelectShakken'),
-    subStaff: [...currentSubStaff],
+    subStaff: [],
     remarks:  document.getElementById('sk-remarks').value,
     skResults, savedAt: new Date().toLocaleString('ja-JP'),
   };
@@ -1403,7 +1435,7 @@ async function saveShakken() {
   try {
     S.orders.unshift(order); saveState();
     const ok = await sbSaveOrder(order);
-    await uploadPendingPhotos(order.id);
+    await uploadPendingPhotos(order.id, 'sk-photos');
     showToast(ok ? `✅ 保存しました（${orderNum}）` : '⚠️ クラウド同期失敗。自動で再送信します', ok?'success':'error');
     clearShakken();
   } catch(e) { showToast('保存に失敗しました','error'); }
@@ -1419,11 +1451,12 @@ function clearShakken() {
   const skPartsPending=document.getElementById('sk-partsPending'); if(skPartsPending) skPartsPending.checked=false;
   document.getElementById('sk-dateIn').value=_todayStr();
   S.skCheckState={}; S.skTruckCheckState={}; S.skTruckNotice={}; S.skTruckPrevent={}; S.skTruckLights={};
-  ['sk-preview-receipt','sk-preview-repair'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
+  ['sk-preview-receipt','sk-preview-repair','sk-photos'].forEach(id => { const el=document.getElementById(id); if(el) el.innerHTML=''; });
   currentSubStaff=[];
-  window._pendingPhotos={};
+  _dropPendingPhotos('sk-photos');
   renderSkItems();
   updateNumDisplay();
+  saveState();
 }
 
 // ─── 一覧 ────────────────────────────────────────────────────
@@ -1553,10 +1586,6 @@ async function renderDniBanner(c, active) {
     el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding:12px 14px;background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px">
       <span style="font-size:15px;font-weight:700;color:#991b1b">🚨 引渡済・請求書未を表示中（${n}件）</span>
       <button onclick="showDeliveredUninvoiced(false)" style="background:#fff;border:1.5px solid #fca5a5;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:700;color:#991b1b;cursor:pointer;white-space:nowrap">解除</button></div>`;
-  } else if (n > 0) {
-    el.innerHTML = `<div onclick="showDeliveredUninvoiced(true)" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding:12px 14px;background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;cursor:pointer">
-      <span style="font-size:15px;font-weight:700;color:#991b1b">🚨 引渡済なのに請求書がまだ：${n}件</span>
-      <span style="background:#dc2626;color:#fff;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:700;white-space:nowrap">確認する</span></div>`;
   } else {
     el.innerHTML = '';
   }
@@ -1658,7 +1687,7 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.21`;
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.31`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
@@ -1832,7 +1861,7 @@ async function quickInvoice(order, _isUndo) {
   await _setInvoiced(order, done);
   if (!_isUndo) showUndoToast(done ? '「請求書済」にしました' : '「請求書未済」にしました', async () => {
     order.progress = prevProgress; order.invoiceDone = prevInvoiceDone;
-    saveState(); if (sb) { try { await sbSaveOrder(order); } catch(e) {} }
+    saveState(); if (sb) { try { await sbPatchOrder(order, { invoice_done: order.invoiceDone, progress: order.progress }); } catch(e) {} }
     showToast('↩ 元に戻しました', 'success'); loadList();
   });
   loadList();
@@ -1880,9 +1909,15 @@ async function quickStatus(orderId, newStatus) {
   });
   order.status = newStatus;
   const updatePayload = { status: newStatus };
-  if((newStatus==='完了'||newStatus==='引渡済') && !order.completedAt){
+  const wasDone = (prevStatus==='完了'||prevStatus==='引渡済');
+  const isDone = (newStatus==='完了'||newStatus==='引渡済');
+  if(isDone && !wasDone){
     order.completedAt = new Date().toISOString();
     updatePayload.completed_at = order.completedAt;
+  } else if(!isDone && wasDone){
+    // 完了を取り消したら完了日も消す（次の完了で新しい日付が入るように）
+    order.completedAt = '';
+    updatePayload.completed_at = null;
   }
   saveState();
   let statusOk = true;
@@ -1931,7 +1966,10 @@ async function quickProgress(orderId, key, _isUndo) {
   if (!_isUndo) showUndoToast(`「${key}」を${has ? '外しました' : '付けました'}`, () => quickProgress(orderId, key, true));
   // Supabase保存完了後にloadList
   if (sb) {
-    try { await sbSaveOrder(order); } catch(e) { console.log('progress保存エラー:', e); }
+    const payload = { progress: order.progress };
+    if (key === '請求書済') payload.invoice_done = order.invoiceDone;
+    if (key === '3ヵ月点検記録簿済') payload.record_done = order.recordDone;
+    try { await sbPatchOrder(order, payload); } catch(e) { console.log('progress保存エラー:', e); }
   }
   // loadListはSupabaseから再読み込みするのでローカルの変更を先に反映
   const c = document.getElementById('orderList');
@@ -1959,7 +1997,7 @@ async function takeOrder(id) {
   order.mechId   = currentUser.id;
   order.status   = order.status==='入庫待ち'||order.status==='入庫中' ? '作業中' : order.status;
   saveState();
-  const ok = await sbSaveOrder(order);
+  const ok = await sbPatchOrder(order, { mech_name: order.mechName, mech_id: order.mechId, status: order.status });
   showToast(ok?`✅ ${currentUser.name} が引き受けました`:'⚠️ 保存失敗', ok?'success':'error');
   loadList();
 }
@@ -1990,6 +2028,8 @@ async function buildPhotoSectionAsync(orderId) {
   const photos = await loadPhotosForOrder(orderId);
   const ph = document.getElementById('photo-section-placeholder');
   if (!ph) return; // 画面が既に閉じられている場合
+  // 別の指示書を開き直していたら、その指示書の写真は表示しない（取り違え防止）
+  if (ph.dataset.orderId && ph.dataset.orderId !== orderId) return;
   if (!photos.length) { ph.innerHTML=''; return; }
   const typeOrder=['作業前','作業中','作業後','納品書','写真'];
   const grouped={}; photos.forEach(p=>{ if(!grouped[p.photo_type]) grouped[p.photo_type]=[]; grouped[p.photo_type].push(p); });
@@ -2036,7 +2076,7 @@ function openShijishoView(order) {
   }
   if(order.remarks) sakugyoHtml+=shijishoSection('📝 備考・メモ',`<div style="white-space:pre-wrap;font-size:15px;line-height:1.8;background:var(--bg);padding:12px;border-radius:8px">${esc(order.remarks)}</div>`);
 
-  let photoHtml='<div id="photo-section-placeholder"></div>';
+  let photoHtml=`<div id="photo-section-placeholder" data-order-id="${order.id}"></div>`;
   buildPhotoSectionAsync(order.id);
 
   const alreadyInOrder = order.mechId===currentUser?.id || (order.subStaff||[]).some(s=>s.id===currentUser?.id);
@@ -2096,7 +2136,7 @@ async function joinAsSubStaff(orderId) {
   if(order.subStaff.find(s=>s.id===currentUser.id)) return;
   order.subStaff.push({ id:currentUser.id, name:currentUser.name });
   saveState();
-  const ok = await sbSaveOrder(order);
+  const ok = await sbPatchOrder(order, { sub_staff: order.subStaff });
   showToast(ok?`${currentUser.name} がサブ担当として参加しました`:'参加登録失敗', ok?'success':'error');
   closeShijishoView();
   openShijishoView(order);
@@ -2375,6 +2415,7 @@ function closeManageModal() { document.getElementById('manageModal')?.remove(); 
 // ─── 編集モーダル ─────────────────────────────────────────────
 let editOrder = null;
 let editRepairType = 'car';
+let editRepairTypeTouched = false;
 let editSkType = 'car';
 let editCarCheck = {};
 let editTruckCheck = {};
@@ -2387,6 +2428,7 @@ function openEditModal(id) {
   if (!order) return;
   editOrder = JSON.parse(JSON.stringify(order));
   editRepairType = order.repairType || 'car';
+  editRepairTypeTouched = false;
   editSkType = order.repairType || 'car';
   editCarCheck   = {};
   editTruckCheck = {};
@@ -2591,6 +2633,7 @@ function openEditModal(id) {
 
 function switchEditRepairType(type) {
   editRepairType = type;
+  editRepairTypeTouched = true;
   ['car','truck','aircon'].forEach(t => {
     document.getElementById('edit-'+t+'-items').style.display = t===type ? '' : 'none';
     document.getElementById('etab-'+t).className = 'btn btn-sm ' + (t===type?'btn-primary':'btn-gray');
@@ -2650,10 +2693,6 @@ function setEditRepairPrevent(label, val) {
 
 function renderEditSkNotice() {
   const c = document.getElementById('edit-sk-notice'); if(!c) return;
-  // 初期値を復元
-  if (editOrder) {
-    Object.entries(editOrder.skTruckNotice||{}).forEach(([k,v])=>{ if(v) editSkNotice[k]=v; });
-  }
   c.innerHTML = DEF_SK_TRUCK_NOTICE.map(label => {
     const val = editSkNotice[label]||'';
     return `<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
@@ -2671,9 +2710,6 @@ function setEditSkNotice(label, val) {
 
 function renderEditSkPrevent() {
   const c = document.getElementById('edit-sk-prevent'); if(!c) return;
-  if (editOrder) {
-    Object.entries(editOrder.skTruckPrevent||{}).forEach(([k,v])=>{ if(v) editSkPrevent[k]=v; });
-  }
   c.innerHTML = DEF_SK_TRUCK_PREVENT.map(label => {
     const val = editSkPrevent[label]||'';
     return `<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
@@ -2691,9 +2727,6 @@ function setEditSkPrevent(label, val) {
 
 function renderEditSkLights() {
   const c = document.getElementById('edit-sk-lights'); if(!c) return;
-  if (editOrder) {
-    Object.entries(editOrder.skTruckLights||{}).forEach(([k,v])=>{ if(v) editSkLights[k]=v; });
-  }
   const headItems  = ['ヘッドライト球（HID）左','ヘッドライト球（HID）右','ヘッドライト球（ハロゲン）左','ヘッドライト球（ハロゲン）右'];
   const countItems = ['ポジション球','ウインカー球','車高灯','ナンバー灯球','マーカー球','マーカーASSY','メーターパネル球','フォグランプ球','スイッチ球'];
   let html = '';
@@ -2795,11 +2828,19 @@ async function saveEdit() {
   order.carName   = document.getElementById('edit-carName')?.value.trim()  || order.carName;
   order.carPlate  = document.getElementById('edit-carPlate')?.value.trim() || order.carPlate;
   order.dateIn    = document.getElementById('edit-dateIn')?.value           ?? order.dateIn;
-  order.dateOut   = document.getElementById('edit-dateOut')?.value          || order.dateOut;
+  order.dateOut   = document.getElementById('edit-dateOut')?.value          ?? order.dateOut;
   order.shakenExpiry = document.getElementById('edit-shakenExpiry')?.value  ?? order.shakenExpiry;
-  order.mechName  = document.getElementById('edit-mechName')?.value.trim() || order.mechName;
+  const newMechName = document.getElementById('edit-mechName')?.value.trim();
+  if (newMechName !== undefined && newMechName !== order.mechName) {
+    // 担当者の名前を変えたら、IDは引き継がない（名前とIDが食い違ったままになるため）
+    order.mechName = newMechName;
+    order.mechId = '';
+  }
+  const prevStatus = editOrder.status;
   order.status    = document.getElementById('edit-status')?.value           || order.status;
-  if((order.status==='完了'||order.status==='引渡済') && !order.completedAt) order.completedAt=new Date().toISOString();
+  const wasDone=(prevStatus==='完了'||prevStatus==='引渡済'), isDone=(order.status==='完了'||order.status==='引渡済');
+  if(isDone && !wasDone) order.completedAt=new Date().toISOString();
+  else if(!isDone && wasDone) order.completedAt='';
   order.remarks   = document.getElementById('edit-remarks')?.value          || '';
   order.plannedStaff = document.getElementById('edit-plannedStaff')?.value.trim() || '';
   order.nyukoMethod  = document.getElementById('edit-nyukoMethod')?.value  || '';
@@ -2812,7 +2853,8 @@ async function saveEdit() {
   if (order.invoiceDone) order.progress.push('請求書済');
 
   if (order.type === 'repair') {
-    order.repairType    = editRepairType;
+    // 種別タブを実際に切り替えたときだけ種別を変える（3か月点検などが、触っていないのに乗用車扱いにならないように）
+    if (editRepairTypeTouched) order.repairType    = editRepairType;
     order.carItems      = Object.entries(editCarCheck).filter(([,v])=>v).map(([k])=>k);
     order.truckItems    = Object.entries(editTruckCheck).filter(([,v])=>v).map(([k])=>k);
     order.airconItems   = Object.entries(editAirconCheck).filter(([,v])=>v).map(([k])=>k);
@@ -2944,7 +2986,7 @@ async function _setInvoiced(order, done){
   order.progress = (order.progress||[]).filter(k => k !== '請求書済');
   if (done) order.progress.push('請求書済');
   saveState();
-  if (sb) { try { await sbSaveOrder(order); } catch(e) { console.log('請求書保存エラー:', e); } }
+  if (sb) { try { await sbPatchOrder(order, { invoice_done: order.invoiceDone, progress: order.progress }); } catch(e) { console.log('請求書保存エラー:', e); } }
 }
 // 食い違っている時に、どちらが正しいか聞く（true=済 / false=未済）
 function _askInvoiceMismatch(order){
@@ -3001,7 +3043,7 @@ async function toggleInvoiceDoneList(id) {
   order.progress = (order.progress||[]).filter(p=>p!=='請求書済');
   if (order.invoiceDone) order.progress.push('請求書済');
   saveState();
-  await sbSaveOrder(order);
+  await sbPatchOrder(order, { invoice_done: order.invoiceDone, progress: order.progress });
   showToast(order.invoiceDone ? '📄 請求書済にしました' : '📄 請求書未に戻しました', 'success');
   loadList();
 }
@@ -3014,7 +3056,7 @@ async function toggleRecordDoneList(id) {
   order.progress = (order.progress||[]).filter(k => k !== '3ヵ月点検記録簿済');
   if (order.recordDone) order.progress.push('3ヵ月点検記録簿済');
   saveState();
-  await sbSaveOrder(order);
+  await sbPatchOrder(order, { record_done: order.recordDone, progress: order.progress });
   showToast(order.recordDone ? '📋 記録簿済にしました' : '📋 記録簿未に戻しました', 'success');
   loadList();
 }
@@ -3024,7 +3066,7 @@ async function toggleBookmark(id) {
   if (!order) return;
   order.bookmarked = !order.bookmarked;
   saveState();
-  await sbSaveOrder(order);
+  await sbPatchOrder(order, { bookmarked: order.bookmarked });
   showToast(order.bookmarked ? '⭐ ブックマークしました' : 'ブックマークを解除しました', 'success');
   closeShijishoView();
   openShijishoView(order);
@@ -3039,7 +3081,7 @@ async function toggleInvoiceDone(id) {
   order.progress = (order.progress||[]).filter(k => k !== '請求書済');
   if (order.invoiceDone) order.progress.push('請求書済');
   saveState();
-  await sbSaveOrder(order);
+  await sbPatchOrder(order, { invoice_done: order.invoiceDone, progress: order.progress });
   showToast(order.invoiceDone ? '📄 請求書作成済みにしました' : '請求書未に戻しました', 'success');
   closeShijishoView();
   openShijishoView(order);
@@ -3054,7 +3096,7 @@ async function toggleRecordDone(id) {
   order.progress = (order.progress||[]).filter(k => k !== '3ヵ月点検記録簿済');
   if (order.recordDone) order.progress.push('3ヵ月点検記録簿済');
   saveState();
-  await sbSaveOrder(order);
+  await sbPatchOrder(order, { record_done: order.recordDone, progress: order.progress });
   showToast(order.recordDone ? '📋 記録簿作成済みにしました' : '記録簿未に戻しました', 'success');
   closeShijishoView();
   openShijishoView(order);
@@ -3063,16 +3105,25 @@ async function toggleRecordDone(id) {
 
 function changeStatus(id,status) {
   const order=S.orders.find(o=>o.id===id); if(!order) return;
+  const prevStatus=order.status;
   order.status=status;
-  if((status==='完了'||status==='引渡済') && !order.completedAt) order.completedAt=new Date().toISOString();
-  saveState(); sbSaveOrder(order);
+  const payload={ status };
+  const wasDone=(prevStatus==='完了'||prevStatus==='引渡済'), isDone=(status==='完了'||status==='引渡済');
+  if(isDone && !wasDone){ order.completedAt=new Date().toISOString(); payload.completed_at=order.completedAt; }
+  else if(!isDone && wasDone){ order.completedAt=''; payload.completed_at=null; }
+  saveState(); sbPatchOrder(order, payload);
   showToast(`ステータスを「${status}」に変更しました`,'success');
   closeShijishoView(); openShijishoView(order); loadList();
 }
 
 function deleteOrder(id) {
   if(!confirm('この指示書を削除しますか？')) return false;
-  S.orders=S.orders.filter(o=>o.id!==id); saveState(); sbDeleteOrder(id);
+  S.orders=S.orders.filter(o=>o.id!==id); saveState();
+  // 保存待ちに残っていると、後で送信されて指示書が復活してしまうので取り除く
+  removePendingOrder(id);
+  setPendingWrites(getPendingWrites().filter(w => w.matchId !== id && !(Array.isArray(w.payload) && w.payload.length > 0 && w.payload.every(r => r && r.kiroku_id === id))));
+  if (sb) { try { sb.from(DB_TABLES.PHOTOS).delete().eq('kiroku_id', id); } catch(e) {} }
+  sbDeleteOrder(id);
   showToast('削除しました','info');
   return true;
 }
