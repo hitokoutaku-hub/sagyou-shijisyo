@@ -1690,7 +1690,7 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.32`;
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.33`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
@@ -1762,6 +1762,10 @@ async function loadList(forceLoadAll) {
     const progressBtns=progressDef.map(([icon,key,bg,color])=>(key==='請求書済' && _invoiceMismatch(o))
       ? `<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:#fff7ed;color:#c2410c;border:1.5px dashed #f97316;border-radius:10px;cursor:pointer;">⚠️ 請求書 要確認</button>`
       : `<button onclick="quickProgress('${o.id}','${key}');return false;" style="padding:9px 6px;font-size:13px;font-weight:700;text-align:center;background:${prog.includes(key)?bg:'#f8fafc'};color:${prog.includes(key)?color:'#94a3b8'};border:1.5px solid ${prog.includes(key)?color:'#e2e8f0'};border-radius:10px;cursor:pointer;">${icon} ${key}</button>`).join('');
+    // 種類バッジ（一覧で3か月点検・オイル交換・車検などが一目で分かるように）
+    const typeColors={'車検':['#eff6ff','#1d4ed8'],'事故修理':['#fef2f2','#991b1b'],'3か月点検':['#f0fdf4','#15803d'],'オイル交換':['#fefce8','#a16207'],'クーラー修理':['#f0f9ff','#0369a1'],'冷凍機修理':['#f8fafc','#334155'],'部品注文':['#faf5ff','#7e22ce'],'一般修理':['#fff7ed','#c2410c']};
+    const _tc=typeColors[_orderTypeLabel(o)]||typeColors['一般修理'];
+    const typeBadge=`<span style="background:${_tc[0]};color:${_tc[1]};font-size:12px;font-weight:800;border-radius:6px;padding:2px 8px;margin-left:6px;">${_orderTypeLabel(o)}</span>`;
     // 車検専用：陸運局まわりの進捗ボタン（車検の指示書のみ表示）
     const shakkenProgressDef=[['🏢','先に陸運局','#e0f2fe','#0369a1'],['✅','陸運局回送済','#dcfce7','#166534']];
     const shakkenProgressBtns=o.type==='shakken'?`<div style="margin-top:8px;">
@@ -1774,7 +1778,7 @@ async function loadList(forceLoadAll) {
     const takeBtn=isUntaken?`<div onclick="takeOrder('${o.id}')" style="margin-top:10px;background:#f97316;border-radius:10px;color:#fff;font-size:17px;font-weight:700;padding:14px;cursor:pointer;text-align:center;width:100%;box-sizing:border-box;">✋ 私が担当します</div>`:'';
     return `<div class="order-item" onclick="if(!event.target.closest('button'))showDetail('${o.id}')" style="border:${cardBorder};${isNotStartedDue?'background:#fef2f2;':''}box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:10px;cursor:pointer;">
       <div class="top">
-        <span class="order-num">${carryBadge}${bookmarkBadge}${rikuunBadge}${notStartedBadge}${overdueBadge}${alertMark}${esc(o.orderNum||'（番号なし）')}</span>
+        <span class="order-num">${carryBadge}${bookmarkBadge}${rikuunBadge}${notStartedBadge}${overdueBadge}${alertMark}${esc(o.orderNum||'（番号なし）')}${typeBadge}</span>
       </div>
       <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:6px;">${o.type==='shakken'?'🔍 ':o.type==='accident'?'🚨 ':''}${esc(o.custName)}　${esc(o.carName)}${o.carPlate?'　【'+esc(o.carPlate)+'】':''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--sub);font-size:15px;line-height:1.8;">
