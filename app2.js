@@ -727,8 +727,8 @@ function switchRepairType(type) {
   if (type==='truck')   renderTruckItems();
   if (type==='aircon')  renderAirconItems();
   if (type==='freezer') renderFreezerItems();
-  if (type==='3month')  renderThreeMonthItems();
-  if (type==='oil')     renderOilItems();
+  if (type==='3month')  { if (!Object.keys(threeMonthCheckState).length) DEF_3MONTH_TRUCK_REPAIR.forEach(l => threeMonthCheckState[l]=true); renderThreeMonthItems(); }
+  if (type==='oil')     { if (!Object.keys(oilCheckState).length) DEF_OIL_ITEMS.forEach(l => oilCheckState[l]=true); renderOilItems(); }
 }
 
 // ─── 「種類を選んでください」からのショートカット入場 ───────────
@@ -1151,18 +1151,21 @@ async function renderPlateHistory(form) {
   const input = document.getElementById(form.plate); if (!input) return;
   const boxId = form.plate + '-history';
   let box = document.getElementById(boxId);
+  // 既にダブってできていたら1つに寄せる（旧バージョンで開いたままの画面対策）
+  document.querySelectorAll('[id="' + boxId + '"]').forEach(el => { if (el !== box) el.remove(); });
   const plate = input.value.trim();
   if (_normPlate(plate).length < 4) { box?.remove(); return; }
-  const list = await fetchPlateHistory(plate);
-  if (input.value.trim() !== plate) return; // 入力が変わっていたら捨てる
-  if (!list.length) { box?.remove(); return; }
   if (!box) {
+    // 履歴の取得（await）より前に箱を作る。同時に呼ばれても2個目の箱ができないように
     box = document.createElement('div');
     box.id = boxId; box.className = 'plate-history';
     let anchor = input;
     while (anchor.parentElement && !anchor.parentElement.classList.contains('card')) anchor = anchor.parentElement;
     anchor.after(box);
   }
+  const list = await fetchPlateHistory(plate);
+  if (input.value.trim() !== plate) return; // 入力が変わっていたら捨てる
+  if (!list.length) { box.remove(); return; }
   const latest = list[0];
   const custEl = document.getElementById(form.cust), carEl = document.getElementById(form.car);
   const canFill = (custEl && !custEl.value.trim() && latest.custName) || (carEl && !carEl.value.trim() && latest.carName);
@@ -1687,7 +1690,7 @@ async function loadList(forceLoadAll) {
     return (b.dateIn||'').localeCompare(a.dateIn||'');
   });
   const _now2=new Date();const _hh=String(_now2.getHours()).padStart(2,'0'),_mm=String(_now2.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.31`;
+  const el=document.getElementById('listSyncLabel'); if(el) el.textContent=(sbReady?'クラウド同期済み':'ローカル保存')+`　最終更新 ${_hh}:${_mm}　ver.32`;
 
   // 進捗バー（請求書未済・3ヵ月点検未済フィルター時）
   const filterExtraVal=document.getElementById('filterExtra')?.value;
@@ -2054,21 +2057,30 @@ async function buildPhotoSectionAsync(orderId) {
 }
 
 function openShijishoView(order) {
-  const typeLabel=order.type==='shakken'?'車検指示書':order.type==='accident'?'事故修理指示書':'作業指示書';
+  const typeLabel=order.type==='shakken'?'車検指示書':order.type==='accident'?'事故修理指示書':`作業指示書（${_orderTypeLabel(order)}）`;
   const subNames=(order.subStaff||[]).map(s=>s.name).join('・');
   let sakugyoHtml='';
   if(order.type==='accident') {
     if(order.insurance) sakugyoHtml+=shijishoSection('🏢 保険会社',`<span style="font-size:16px;font-weight:700">${esc(order.insurance)}</span>`);
-  } else if(order.type==='shakken'&&order.skResults) {
-    const res=Object.entries(order.skResults).filter(([,v])=>v);
-    if(res.length) sakugyoHtml+=shijishoSection('🔍 車検点検結果',res.map(([k,v])=>`
+  } else if(order.type==='shakken') {
+    const resMap=order.skResults||{};
+    const master=(order.repairType==='truck'?(S.skTruckItems||[]):(S.skItems||[])).map(i=>i.label).filter(l=>l&&l.trim());
+    let rows=master.map(l=>[l,resMap[l]||'']);
+    if(resMap['__kit__']) rows.unshift(['整備区分',resMap['__kit__']]);
+    if(!rows.length) rows=Object.entries(resMap).filter(([k,v])=>v&&k!=='__kit__');
+    if(rows.length) sakugyoHtml+=shijishoSection('🔍 車検点検項目',rows.map(([k,v])=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #2a3050">
-        <span style="font-size:14px">${k}</span>
-        <span style="font-weight:700;color:${v==='良好'?'var(--ok)':v==='交換'?'var(--danger)':'var(--accent)'}">${v}</span>
+        <span style="font-size:14px">${esc(k)}</span>
+        ${v?`<span style="font-weight:700;color:${v==='良好'?'var(--ok)':v==='交換'?'var(--danger)':'var(--accent)'}">${esc(v)}</span>`:`<span style="font-size:12px;color:var(--sub)">未入力</span>`}
       </div>`).join(''));
   } else {
     const allItems=[...(order.carItems||[]),...(order.truckItems||[]),...(order.airconItems||[])];
     if(allItems.length)           sakugyoHtml+=shijishoSection('✅ 依頼事項',tagList(allItems,'var(--accent)'));
+    const stdList = order.repairType==='3month' ? DEF_3MONTH_TRUCK_REPAIR : order.repairType==='oil' ? DEF_OIL_ITEMS : null;
+    if(stdList) sakugyoHtml+=shijishoSection(order.repairType==='3month'?'📋 3か月点検の項目':'📋 オイル交換の項目', stdList.map(l=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2a3050">
+        <span>${allItems.includes(l)?'✅':'⬜'}</span><span style="font-size:14px;${allItems.includes(l)?'':'color:var(--sub)'}">${l}</span>
+      </div>`).join(''));
     if(order.noticeItems?.length) sakugyoHtml+=shijishoSection('👁️ 気がついた事',tagList(order.noticeItems,'var(--info)'));
     const prev=Object.entries(order.preventResults||{}).filter(([,v])=>v);
     if(prev.length) sakugyoHtml+=shijishoSection('🛡️ 予防整備',prev.map(([k,v])=>`<span style="display:inline-block;margin:3px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;background:${v==='OK'?'rgba(48,176,96,0.2)':'rgba(224,64,64,0.2)'};color:${v==='OK'?'var(--ok)':'var(--danger)'}">${k}：${v}</span>`).join(''));
@@ -2185,6 +2197,10 @@ function sendLineReport(orderId) {
   if(order.carName)  text+=`車両: ${order.carName} ${order.carPlate||''}\n`;
   text+=`入庫: ${order.dateIn||''}　出庫予定: ${order.dateOut||''}\n`;
   text+=`担当: ${order.mechName||''}${subNames?'・'+subNames:''}\n`;
+  text+=`種類: ${_orderTypeLabel(order)}\n`;
+  const lineItems=[...(order.carItems||[]),...(order.truckItems||[]),...(order.airconItems||[])];
+  if(lineItems.length) text+=`\n【依頼事項】${lineItems.join('、')}`;
+  if(order.type==='shakken'){ const rs=Object.entries(order.skResults||{}).filter(([k,v])=>v&&k!=='__kit__'); if(rs.length) text+=`\n【点検結果】${rs.map(([k,v])=>`${k}:${v}`).join('、')}`; }
   if(order.remarks) text+=`\n【備考】${order.remarks}`;
   window.open('https://line.me/R/share?text='+encodeURIComponent(text),'_blank');
 }
