@@ -205,6 +205,7 @@ async function flushPendingOrders() {
   } finally { _flushingOrders = false; }
 }
 async function sbSaveOrder(order, _attempt) {
+  _bellSelf.add(order.id); // この端末で保存した指示書は、新規ベルの対象にしない
   if (!sb) { queuePendingOrder(order); return false; }
   // 完了・引渡済なのに完了日が無いものは、ここで補う（新規登録で選んだ場合など）
   if ((order.status === '完了' || order.status === '引渡済') && !order.completedAt) order.completedAt = new Date().toISOString();
@@ -1857,6 +1858,7 @@ async function loadList(forceLoadAll) {
     renderGroup(`⚠️ ステータス未設定（要確認）　${unknownStatusOrders.length}件`,'⚠️','#fef2f2','#991b1b','#ef4444','#ef4444',unknownStatusOrders,unknownStatusOrders.length===0)+
     renderGroup(`🗓️ 日程未定　${undecidedOrders.length}件`,'🗓️','#f5f3ff','#6d28d9','#8b5cf6','#8b5cf6',undecidedOrders,undecidedOrders.length===0)+
     renderGroup(`それ以前の完了・引渡済　${doneOrdersRest.length}件`,'✅','#f8fafc','#64748b','#cbd5e1','#94a3b8',doneOrdersRest,true);
+  try{ bellCheckOrders(S.orders); }catch(e){}
 }
 
 // ─── 作業引き受け ────────────────────────────────────────────
@@ -3394,9 +3396,129 @@ function initApp() {
   ['r-dateIn','sk-dateIn','ac-dateIn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=today; });
 }
 
+// ─── 新規指示書ベル ───────────────────────────────────────────
+// 他のスタッフが新しい指示書を追加したら、決めた時間帯の中だけベルで知らせる。
+// 設定（オン/オフ・開始/終了時刻）は端末ごとに localStorage へ保存する。
+const _bellSelf = new Set();   // この端末で保存した指示書ID（自分の追加では鳴らさない）
+let _bellKnown = null;         // 既知の指示書ID集合。最初の読み込みで初期化し、その回は鳴らさない
+let _bellCtx = null;           // 音を出すための AudioContext（画面を触った時に解錠される）
+
+function bellCfg(){
+  let on = true, start = '09:00', end = '18:00';
+  try{
+    const o = localStorage.getItem('ws3_bell_on');
+    if (o !== null) on = o === '1';
+    start = localStorage.getItem('ws3_bell_start') || start;
+    end   = localStorage.getItem('ws3_bell_end')   || end;
+  }catch(e){}
+  return { on, start, end };
+}
+function bellInWindow(){
+  const { start, end } = bellCfg();
+  const now = new Date();
+  const t = now.getHours()*60 + now.getMinutes();
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  return t >= sh*60 + (sm||0) && t < eh*60 + (em||0);
+}
+function bellUnlock(){
+  try{
+    if (!_bellCtx) _bellCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_bellCtx.state === 'suspended') _bellCtx.resume();
+  }catch(e){}
+}
+function playBell(){
+  bellUnlock();
+  if (!_bellCtx) return;
+  const strike = (at) => {
+    const t0 = _bellCtx.currentTime + at;
+    [[1318.5, 0.20], [2637, 0.06]].forEach(([freq, vol]) => {
+      const osc = _bellCtx.createOscillator();
+      const gain = _bellCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(vol, t0);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.1);
+      osc.connect(gain);
+      gain.connect(_bellCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 1.15);
+    });
+  };
+  strike(0);
+  strike(0.5);
+}
+function testBell(){ playBell(); }
+function bellNotify(fresh){
+  if (!fresh.length) return;
+  const cfg = bellCfg();
+  if (!cfg.on || !bellInWindow()) return;
+  playBell();
+  showToast(`🔔 新しい指示書が ${fresh.length} 件追加されました`, 'info', 5000);
+}
+function bellCheckOrders(orders){
+  if (!orders) return;
+  if (!_bellKnown){
+    _bellKnown = new Set(orders.map(o => o.id));
+    return;
+  }
+  const fresh = orders.filter(o => !_bellKnown.has(o.id) && !_bellSelf.has(o.id));
+  orders.forEach(o => _bellKnown.add(o.id));
+  bellNotify(fresh);
+}
+async function bellPoll(){
+  if (!sbReady || !currentUser || !_bellKnown) return;
+  try{
+    const { data, error } = await sb.from(DB_TABLES.KIROKU).select('id').order('created_at', { ascending: false }).limit(50);
+    if (error || !data) return;
+    const fresh = data.filter(r => !_bellKnown.has(r.id) && !_bellSelf.has(r.id));
+    data.forEach(r => _bellKnown.add(r.id));
+    if (fresh.length){
+      bellNotify(fresh);
+      const listPanel = document.getElementById('panel-list');
+      const editing = document.getElementById('shijishoView') || document.getElementById('editModal') || document.getElementById('manageModal') || document.getElementById('undoToast');
+      if (listPanel && listPanel.classList.contains('active') && !editing) loadList();
+    }
+  }catch(e){}
+}
+function renderBellUI(){
+  const cfg = bellCfg();
+  const btn = document.getElementById('bellToggleBtn');
+  if (btn) btn.textContent = cfg.on ? '🔔 ベル：オン' : '🔕 ベル：オフ';
+  const lab = document.getElementById('bellStateLabel');
+  if (lab) lab.textContent = cfg.on ? 'オン' : 'オフ';
+  const s = document.getElementById('bellStart'), e = document.getElementById('bellEnd');
+  if (s) s.value = cfg.start;
+  if (e) e.value = cfg.end;
+}
+function toggleBell(){
+  const cfg = bellCfg();
+  try{ localStorage.setItem('ws3_bell_on', cfg.on ? '0' : '1'); }catch(e){}
+  renderBellUI();
+  if (!cfg.on){
+    bellUnlock();
+    showToast(`🔔 ベルをオンにしました（${cfg.start}〜${cfg.end} の間だけ鳴ります）`, 'success');
+  } else {
+    showToast('🔕 ベルをオフにしました', 'info');
+  }
+}
+function saveBellTimes(){
+  const s = document.getElementById('bellStart')?.value || '09:00';
+  const e = document.getElementById('bellEnd')?.value || '18:00';
+  try{
+    localStorage.setItem('ws3_bell_start', s);
+    localStorage.setItem('ws3_bell_end', e);
+  }catch(err){}
+  renderBellUI();
+  showToast(`🔔 ベルの時間を ${s}〜${e} にしました`, 'success');
+}
+document.addEventListener('pointerdown', bellUnlock);
+setInterval(bellPoll, 60000);
+
 // ─── 起動 ─────────────────────────────────────────────────────
 initSupabase();
 initAuth();
+renderBellUI();
 setInterval(()=>{
   // 一覧画面を見ている時だけ、他のスタッフの更新を軽く取り直す（3分に1回、負荷を抑えるため間隔は長め）
   const listPanel=document.getElementById('panel-list');

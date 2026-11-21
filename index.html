@@ -95,6 +95,7 @@
       <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--sub);margin-top:8px;">
         <span class="sync-dot" id="syncDot2"></span>
         <span id="listSyncLabel">読み込み中...</span>
+        <button id="bellToggleBtn" onclick="toggleBell()" style="margin-left:auto;background:var(--card2);border:1.5px solid var(--border);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;color:var(--text);cursor:pointer;white-space:nowrap;">🔔 ベル：オン</button>
       </div>
     </div>
     <div id="orderList"><div class="loading"><span class="spinner"></span></div></div>
@@ -459,6 +460,22 @@
       <div id="insuranceSettings"></div>
     </div>
     <div class="card">
+      <div class="card-title">🔔 新規指示書ベル</div>
+      <p style="color:var(--sub);font-size:12px;margin-bottom:10px">他のスタッフが新しい指示書を追加すると、ベルで知らせます（自分の追加では鳴りません）</p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-size:14px;font-weight:700">状態：<span id="bellStateLabel">オン</span></span>
+        <button class="btn btn-primary btn-sm" onclick="toggleBell()">オン/オフ切り替え</button>
+        <button class="btn btn-gray btn-sm" onclick="testBell()">テスト再生</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px">鳴らす時間</span>
+        <input type="time" id="bellStart" value="09:00" style="padding:8px;font-size:14px">
+        <span>〜</span>
+        <input type="time" id="bellEnd" value="18:00" style="padding:8px;font-size:14px">
+        <button class="btn btn-primary btn-sm" onclick="saveBellTimes()">時間を保存</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">🔢 採番リセット</div>
       <button class="btn btn-sm btn-danger" onclick="resetCounter()">連番をリセット</button>
     </div>
@@ -482,6 +499,6 @@
 </div>
 
 <script src="auth.js?v=3"></script>
-<script src="app2.js?v=33"></script>
+<script src="app2.js?v=34"></script>
 </body>
 </html>
