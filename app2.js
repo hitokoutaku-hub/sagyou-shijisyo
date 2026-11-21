@@ -206,6 +206,7 @@ async function flushPendingOrders() {
 }
 async function sbSaveOrder(order, _attempt) {
   _bellSelf.add(order.id); // この端末で保存した指示書は、新規ベルの対象にしない
+  try{ localStorage.setItem('ws3_bell_self', JSON.stringify([..._bellSelf].slice(-1000))); }catch(e){}
   if (!sb) { queuePendingOrder(order); return false; }
   // 完了・引渡済なのに完了日が無いものは、ここで補う（新規登録で選んだ場合など）
   if ((order.status === '完了' || order.status === '引渡済') && !order.completedAt) order.completedAt = new Date().toISOString();
@@ -3398,10 +3399,29 @@ function initApp() {
 
 // ─── 新規指示書ベル ───────────────────────────────────────────
 // 他のスタッフが新しい指示書を追加したら、決めた時間帯の中だけベルで知らせる。
-// 設定（オン/オフ・開始/終了時刻）は端末ごとに localStorage へ保存する。
+// 設定（オン/オフ・開始/終了時刻）と「見たことのある指示書ID」は端末ごとに localStorage へ保存する。
+// IDを保存しておくので、アプリを閉じている間に増えた分も、次に開いた時に1回だけ鳴らせる。
+// ただし端末に保存が無い一番最初の起動だけは、既にある分を全部「見た」ことにして鳴らさない。
 const _bellSelf = new Set();   // この端末で保存した指示書ID（自分の追加では鳴らさない）
-let _bellKnown = null;         // 既知の指示書ID集合。最初の読み込みで初期化し、その回は鳴らさない
+let _bellKnown = null;         // 既知の指示書ID集合
 let _bellCtx = null;           // 音を出すための AudioContext（画面を触った時に解錠される）
+let _bellPending = false;      // 鳴らしたいのに音がまだ解錠されていない時、最初のタップで鳴らすための印
+try{
+  const _bs = JSON.parse(localStorage.getItem('ws3_bell_self') || '[]');
+  _bs.forEach(id => _bellSelf.add(id));
+  const _bk = localStorage.getItem('ws3_bell_known');
+  if (_bk) _bellKnown = new Set(JSON.parse(_bk));
+}catch(e){}
+function bellSaveKnown(){
+  try{
+    if (_bellKnown && _bellKnown.size > 5000){
+      const arr = [..._bellKnown];
+      _bellKnown = new Set(arr.slice(arr.length - 4000));
+    }
+    localStorage.setItem('ws3_bell_known', JSON.stringify(_bellKnown ? [..._bellKnown] : []));
+    localStorage.setItem('ws3_bell_self', JSON.stringify([..._bellSelf].slice(-1000)));
+  }catch(e){}
+}
 
 function bellCfg(){
   let on = true, start = '09:00', end = '18:00';
@@ -3453,17 +3473,23 @@ function bellNotify(fresh){
   if (!fresh.length) return;
   const cfg = bellCfg();
   if (!cfg.on || !bellInWindow()) return;
-  playBell();
   showToast(`🔔 新しい指示書が ${fresh.length} 件追加されました`, 'info', 5000);
+  // 音はブラウザの決まりで「画面を一度触った後」でないと出せない。
+  // まだ解錠されていない時は印だけ付けて、最初のタップの瞬間に鳴らす。
+  if (_bellCtx && _bellCtx.state === 'running') playBell();
+  else _bellPending = true;
 }
 function bellCheckOrders(orders){
   if (!orders) return;
   if (!_bellKnown){
+    // この端末で初めての起動：既にある分は全部「見た」ことにして鳴らさない
     _bellKnown = new Set(orders.map(o => o.id));
+    bellSaveKnown();
     return;
   }
   const fresh = orders.filter(o => !_bellKnown.has(o.id) && !_bellSelf.has(o.id));
   orders.forEach(o => _bellKnown.add(o.id));
+  bellSaveKnown();
   bellNotify(fresh);
 }
 async function bellPoll(){
@@ -3473,6 +3499,7 @@ async function bellPoll(){
     if (error || !data) return;
     const fresh = data.filter(r => !_bellKnown.has(r.id) && !_bellSelf.has(r.id));
     data.forEach(r => _bellKnown.add(r.id));
+    bellSaveKnown();
     if (fresh.length){
       bellNotify(fresh);
       const listPanel = document.getElementById('panel-list');
@@ -3512,7 +3539,13 @@ function saveBellTimes(){
   renderBellUI();
   showToast(`🔔 ベルの時間を ${s}〜${e} にしました`, 'success');
 }
-document.addEventListener('pointerdown', bellUnlock);
+document.addEventListener('pointerdown', () => {
+  bellUnlock();
+  if (_bellPending){
+    _bellPending = false;
+    if (bellCfg().on && bellInWindow()) playBell();
+  }
+});
 setInterval(bellPoll, 60000);
 
 // ─── 起動 ─────────────────────────────────────────────────────
